@@ -1,25 +1,23 @@
-// Main application script
-
 let supabaseClient;
 let currentPage = 1;
 let totalCount = 0;
-let currentFilters = {
+let selectedBid = null;
+
+const state = {
     keyword: '',
     startDate: '',
     endDate: '',
     sortBy: 'notice_date',
-    sortOrder: 'desc'
+    sortOrder: 'desc',
 };
-let currentBidDetail = null;
 
 function initSupabase() {
     try {
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        console.log('Supabase 클라이언트 초기화 완료');
         return true;
     } catch (error) {
         console.error('Supabase 초기화 실패:', error);
-        showError('Supabase 연결에 실패했습니다. 설정을 확인해 주세요.');
+        alert('Supabase 연결에 실패했습니다.');
         return false;
     }
 }
@@ -29,170 +27,139 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     initEventListeners();
     setDefaultDates(30);
-    currentFilters.startDate = document.getElementById('start-date').value;
-    currentFilters.endDate = document.getElementById('end-date').value;
-
-    await loadBids();
-    await updateStatistics();
-    updateLastUpdateTime();
+    syncDateFilterState();
+    await refreshDashboard();
 });
 
 function initEventListeners() {
-    document.getElementById('search-btn').addEventListener('click', handleSearch);
+    document.getElementById('search-btn').addEventListener('click', onSearch);
+    document.getElementById('apply-filter-btn').addEventListener('click', onApplyFilter);
+    document.getElementById('reset-btn').addEventListener('click', onReset);
+    document.getElementById('refresh-data-btn').addEventListener('click', onRefreshData);
+    document.getElementById('sort-select').addEventListener('change', onSortChange);
+    document.getElementById('prev-page').addEventListener('click', () => changePage(currentPage - 1));
+    document.getElementById('next-page').addEventListener('click', () => changePage(currentPage + 1));
     document.getElementById('keyword-search').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleSearch();
+        if (e.key === 'Enter') onSearch();
     });
-
-    document.getElementById('apply-filter-btn').addEventListener('click', handleApplyFilter);
-    document.getElementById('reset-btn').addEventListener('click', handleReset);
+    document.getElementById('open-detail-btn').addEventListener('click', openSelectedBidUrl);
 
     document.querySelectorAll('.quick-dates .btn').forEach((btn) => {
         btn.addEventListener('click', async (e) => {
-            const days = parseInt(e.currentTarget.dataset.days, 10);
+            const days = Number(e.currentTarget.dataset.days || 7);
             setDefaultDates(days);
-            currentFilters.startDate = document.getElementById('start-date').value;
-            currentFilters.endDate = document.getElementById('end-date').value;
+            syncDateFilterState();
             currentPage = 1;
             await loadBids();
         });
     });
-
-    document.getElementById('sort-select').addEventListener('change', handleSortChange);
-    document.getElementById('prev-page').addEventListener('click', () => changePage(currentPage - 1));
-    document.getElementById('next-page').addEventListener('click', () => changePage(currentPage + 1));
-    document.getElementById('refresh-data-btn').addEventListener('click', handleRefreshData);
 }
 
 function setDefaultDates(days) {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-
-    document.getElementById('start-date').value = formatDate(startDate);
-    document.getElementById('end-date').value = formatDate(endDate);
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - days);
+    document.getElementById('start-date').value = formatDate(start);
+    document.getElementById('end-date').value = formatDate(end);
 }
 
-function formatDate(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+function syncDateFilterState() {
+    state.startDate = document.getElementById('start-date').value;
+    state.endDate = document.getElementById('end-date').value;
 }
 
-async function handleSearch() {
-    currentFilters.keyword = document.getElementById('keyword-search').value.trim();
+function formatDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+async function refreshDashboard() {
+    await loadBids();
+    await updateStatistics();
+    updateLastUpdateTime();
+}
+
+async function onSearch() {
+    state.keyword = document.getElementById('keyword-search').value.trim();
     currentPage = 1;
     await loadBids();
 }
 
-async function handleApplyFilter() {
-    currentFilters.startDate = document.getElementById('start-date').value;
-    currentFilters.endDate = document.getElementById('end-date').value;
+async function onApplyFilter() {
+    syncDateFilterState();
     currentPage = 1;
     await loadBids();
 }
 
-async function handleReset() {
+async function onReset() {
     document.getElementById('keyword-search').value = '';
-    setDefaultDates(30);
-    currentFilters = {
-        keyword: '',
-        startDate: document.getElementById('start-date').value,
-        endDate: document.getElementById('end-date').value,
-        sortBy: 'notice_date',
-        sortOrder: 'desc'
-    };
     document.getElementById('sort-select').value = 'notice_desc';
+    setDefaultDates(30);
+    state.keyword = '';
+    state.sortBy = 'notice_date';
+    state.sortOrder = 'desc';
+    syncDateFilterState();
     currentPage = 1;
     await loadBids();
 }
 
-async function handleSortChange(e) {
-    const value = e.target.value;
-    const [sortBy, sortOrder] = value.split('_');
-
-    if (sortBy === 'notice') currentFilters.sortBy = 'notice_date';
-    else if (sortBy === 'bid') currentFilters.sortBy = 'bid_date';
-    else if (sortBy === 'amount') currentFilters.sortBy = 'bid_amount';
-    else currentFilters.sortBy = 'notice_date';
-
-    currentFilters.sortOrder = sortOrder === 'desc' ? 'desc' : 'asc';
-
+async function onSortChange(e) {
+    const [sortBy, sortOrder] = String(e.target.value || 'notice_desc').split('_');
+    state.sortBy = sortBy === 'notice' ? 'notice_date' : sortBy === 'bid' ? 'bid_date' : sortBy === 'amount' ? 'bid_amount' : 'notice_date';
+    state.sortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
     currentPage = 1;
     await loadBids();
 }
 
-async function handleRefreshData() {
+async function onRefreshData() {
     const btn = document.getElementById('refresh-data-btn');
-    const icon = btn.querySelector('i');
-
+    const days = Number(document.getElementById('refresh-days-select').value || 7);
     try {
         btn.disabled = true;
-        icon.classList.add('fa-spin');
-
         const response = await fetch(FETCH_BIDS_FUNCTION_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
             },
-            body: JSON.stringify({
-                days: Number(document.getElementById('refresh-days-select')?.value || 7)
-            })
+            body: JSON.stringify({ days }),
         });
-
-        let result;
-        const rawText = await response.text();
-        try {
-            result = rawText ? JSON.parse(rawText) : {};
-        } catch (_parseError) {
-            result = { success: false, error: rawText || '함수에서 JSON이 아닌 응답을 반환했습니다.' };
-        }
-
-        if (!response.ok) {
-            const serverMessage = result?.error || result?.message || response.statusText || '함수 요청에 실패했습니다.';
-            throw new Error(`HTTP ${response.status}: ${serverMessage}`);
-        }
-
-        if (!result.success) {
-            throw new Error(result.error || '알 수 없는 오류');
+        const text = await response.text();
+        const result = text ? JSON.parse(text) : {};
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || `HTTP ${response.status}`);
         }
 
         alert(`갱신 완료\n${result.message}\n저장: ${result.insertedCount || 0}/${result.totalItems || 0}`);
-        await loadBids();
-        await updateStatistics();
-        updateLastUpdateTime();
+        await refreshDashboard();
     } catch (error) {
-        console.error('Refresh failed:', error);
+        console.error('갱신 실패:', error);
         alert(`데이터 갱신 실패\n${error.message}`);
     } finally {
         btn.disabled = false;
-        icon.classList.remove('fa-spin');
     }
 }
 
 async function loadBids() {
     showLoading(true);
     hideEmptyState();
-
     try {
-        let query = supabaseClient
-            .from('bids')
-            .select('*', { count: 'exact' });
+        let query = supabaseClient.from('bids').select('*', { count: 'exact' });
 
-        if (currentFilters.keyword) {
+        if (state.keyword) {
             query = query.or(
-                `bid_notice_name.ilike.%${currentFilters.keyword}%,` +
-                `bid_notice_org.ilike.%${currentFilters.keyword}%,` +
-                `demand_org.ilike.%${currentFilters.keyword}%`
+                `bid_notice_name.ilike.%${state.keyword}%,` +
+                `bid_notice_org.ilike.%${state.keyword}%,` +
+                `demand_org.ilike.%${state.keyword}%`
             );
         }
 
-        if (currentFilters.startDate) query = query.gte('notice_date', currentFilters.startDate);
-        if (currentFilters.endDate) query = query.lte('notice_date', currentFilters.endDate);
+        if (state.startDate) query = query.gte('notice_date', state.startDate);
+        if (state.endDate) query = query.lte('notice_date', state.endDate);
 
-        const ascending = currentFilters.sortOrder === 'asc';
-        query = query.order(currentFilters.sortBy, { ascending });
+        query = query.order(state.sortBy, { ascending: state.sortOrder === 'asc' });
 
         const from = (currentPage - 1) * APP_CONFIG.ITEMS_PER_PAGE;
         const to = from + APP_CONFIG.ITEMS_PER_PAGE - 1;
@@ -202,116 +169,77 @@ async function loadBids() {
         if (error) throw error;
 
         totalCount = count || 0;
-        if (data && data.length > 0) {
-            displayBids(data);
-            displayPagination();
-            updateResultsCount(totalCount);
-        } else {
+        renderRows(data || []);
+        renderPagination();
+        updateResultsCount(totalCount);
+
+        if (!data || data.length === 0) {
             showEmptyState();
-            updateResultsCount(0);
         }
     } catch (error) {
-        console.error('불러오기 실패:', error);
-        showError('데이터를 불러오지 못했습니다.');
+        console.error('목록 조회 실패:', error);
+        alert('데이터를 불러오지 못했습니다.');
     } finally {
         showLoading(false);
     }
 }
 
-function displayBids(bids) {
-    const bidsList = document.getElementById('bids-list');
-    bidsList.innerHTML = '';
-    bids.forEach((bid) => bidsList.appendChild(createBidCard(bid)));
-}
+function renderRows(rows) {
+    const tbody = document.getElementById('bids-list');
+    tbody.innerHTML = '';
 
-function createBidCard(bid) {
-    const card = document.createElement('div');
-    card.className = 'bid-card';
-    card.onclick = () => showBidDetail(bid);
+    for (const bid of rows) {
+        const tr = document.createElement('tr');
+        tr.dataset.id = bid.bid_notice_no;
+        tr.onclick = () => selectBid(bid, tr);
 
-    const status = String(bid.bid_status || '').toUpperCase();
-    const statusClass = status === 'CLOSED' ? 'closed' : 'active';
-    const formattedAmount = formatCurrency(bid.bid_amount);
-    const formattedNoticeDate = formatDisplayDate(bid.notice_date);
-    const formattedBidDate = formatDisplayDateTime(bid.bid_date);
-
-    card.innerHTML = `
-        <div class="bid-header">
-            <h3 class="bid-title">${escapeHtml(bid.bid_notice_name)}</h3>
-            <span class="bid-status ${statusClass}">${escapeHtml(formatStatusLabel(bid.bid_status))}</span>
-        </div>
-        <div class="bid-meta">
-            <div class="bid-meta-item">
-                <i class="fas fa-building"></i>
-                <span><strong>공고기관:</strong> ${escapeHtml(bid.bid_notice_org || '-')}</span>
-            </div>
-            <div class="bid-meta-item">
-                <i class="fas fa-users"></i>
-                <span><strong>수요기관:</strong> ${escapeHtml(bid.demand_org || '-')}</span>
-            </div>
-            <div class="bid-meta-item">
-                <i class="fas fa-calendar"></i>
-                <span><strong>공고일:</strong> ${formattedNoticeDate}</span>
-            </div>
-            <div class="bid-meta-item">
-                <i class="fas fa-clock"></i>
-                <span><strong>입찰마감:</strong> ${formattedBidDate}</span>
-            </div>
-            <div class="bid-meta-item">
-                <i class="fas fa-file-contract"></i>
-                <span><strong>계약방식:</strong> ${escapeHtml(bid.contract_type || '-')}</span>
-            </div>
-            <div class="bid-meta-item">
-                <i class="fas fa-won-sign"></i>
-                <span><strong>추정금액:</strong> <span class="bid-amount">${formattedAmount}</span></span>
-            </div>
-        </div>
-    `;
-
-    return card;
-}
-
-function showBidDetail(bid) {
-    currentBidDetail = bid;
-    const modal = document.getElementById('bid-modal');
-    const modalBody = document.getElementById('modal-body');
-    const modalTitle = document.getElementById('modal-title');
-
-    modalTitle.textContent = bid.bid_notice_name || '공고 상세';
-
-    const formattedAmount = formatCurrency(bid.bid_amount);
-    const formattedNoticeDate = formatDisplayDate(bid.notice_date);
-    const formattedBidDate = formatDisplayDateTime(bid.bid_date);
-
-    modalBody.innerHTML = `
-        <div class="detail-row"><div class="detail-label">공고번호</div><div class="detail-value">${escapeHtml(bid.bid_notice_no)}</div></div>
-        <div class="detail-row"><div class="detail-label">공고기관</div><div class="detail-value">${escapeHtml(bid.bid_notice_org || '-')}</div></div>
-        <div class="detail-row"><div class="detail-label">수요기관</div><div class="detail-value">${escapeHtml(bid.demand_org || '-')}</div></div>
-        <div class="detail-row"><div class="detail-label">공고일</div><div class="detail-value">${formattedNoticeDate}</div></div>
-        <div class="detail-row"><div class="detail-label">입찰마감</div><div class="detail-value">${formattedBidDate}</div></div>
-        <div class="detail-row"><div class="detail-label">계약방식</div><div class="detail-value">${escapeHtml(bid.contract_type || '-')}</div></div>
-        <div class="detail-row"><div class="detail-label">추정금액</div><div class="detail-value" style="color: var(--primary-color); font-weight: 600;">${formattedAmount}</div></div>
-        <div class="detail-row"><div class="detail-label">상태</div><div class="detail-value">${escapeHtml(formatStatusLabel(bid.bid_status))}</div></div>
-        ${bid.description ? `<div class="detail-row"><div class="detail-label">설명</div><div class="detail-value">${escapeHtml(bid.description)}</div></div>` : ''}
-    `;
-
-    modal.classList.add('active');
-}
-
-function closeBidModal() {
-    document.getElementById('bid-modal').classList.remove('active');
-    currentBidDetail = null;
-}
-
-function openBidDetail() {
-    if (currentBidDetail && currentBidDetail.detail_url) {
-        window.open(currentBidDetail.detail_url, '_blank');
-    } else {
-        alert('상세 URL이 없습니다.');
+        const statusLabel = formatStatusLabel(bid.bid_status);
+        const statusClass = String(bid.bid_status || '').toUpperCase() === 'CLOSED' ? 'status-closed' : 'status-open';
+        tr.innerHTML = `
+            <td class="title-cell">${escapeHtml(bid.bid_notice_name || '-')}</td>
+            <td><div>${escapeHtml(bid.bid_notice_org || '-')}</div><div class="muted">${escapeHtml(bid.demand_org || '-')}</div></td>
+            <td>${formatDisplayDate(bid.notice_date)}</td>
+            <td>${formatDisplayDateTime(bid.bid_date)}</td>
+            <td>${formatCurrency(bid.bid_amount)}</td>
+            <td><span class="status-pill ${statusClass}">${statusLabel}</span></td>
+        `;
+        tbody.appendChild(tr);
     }
 }
 
-function displayPagination() {
+function selectBid(bid, rowEl) {
+    selectedBid = bid;
+    document.querySelectorAll('#bids-list tr').forEach((r) => r.classList.remove('is-selected'));
+    rowEl.classList.add('is-selected');
+    renderDetail(bid);
+}
+
+function renderDetail(bid) {
+    const body = document.getElementById('detail-body');
+    const openBtn = document.getElementById('open-detail-btn');
+    const statusLabel = formatStatusLabel(bid.bid_status);
+    body.innerHTML = `
+        <div class="detail-item"><strong>공고명</strong>${escapeHtml(bid.bid_notice_name || '-')}</div>
+        <div class="detail-item"><strong>공고번호</strong>${escapeHtml(bid.bid_notice_no || '-')}</div>
+        <div class="detail-item"><strong>공고기관</strong>${escapeHtml(bid.bid_notice_org || '-')}</div>
+        <div class="detail-item"><strong>수요기관</strong>${escapeHtml(bid.demand_org || '-')}</div>
+        <div class="detail-item"><strong>공고일</strong>${formatDisplayDate(bid.notice_date)}</div>
+        <div class="detail-item"><strong>입찰마감</strong>${formatDisplayDateTime(bid.bid_date)}</div>
+        <div class="detail-item"><strong>계약방식</strong>${escapeHtml(bid.contract_type || '-')}</div>
+        <div class="detail-item"><strong>추정금액</strong>${formatCurrency(bid.bid_amount)}</div>
+        <div class="detail-item"><strong>상태</strong>${escapeHtml(statusLabel)}</div>
+        <div class="detail-item"><strong>설명</strong>${escapeHtml(bid.description || '-')}</div>
+    `;
+    openBtn.style.display = bid.detail_url ? 'inline-flex' : 'none';
+}
+
+function openSelectedBidUrl() {
+    if (selectedBid?.detail_url) {
+        window.open(selectedBid.detail_url, '_blank');
+    }
+}
+
+function renderPagination() {
     const totalPages = Math.ceil(totalCount / APP_CONFIG.ITEMS_PER_PAGE);
     const pagination = document.getElementById('pagination');
     if (totalPages <= 1) {
@@ -325,18 +253,15 @@ function displayPagination() {
 
     const pageNumbers = document.getElementById('page-numbers');
     pageNumbers.innerHTML = '';
+    const start = Math.max(1, currentPage - 2);
+    const end = Math.min(totalPages, start + 4);
 
-    const maxPages = 5;
-    let startPage = Math.max(1, currentPage - Math.floor(maxPages / 2));
-    let endPage = Math.min(totalPages, startPage + maxPages - 1);
-    if (endPage - startPage < maxPages - 1) startPage = Math.max(1, endPage - maxPages + 1);
-
-    for (let i = startPage; i <= endPage; i++) {
-        const pageBtn = document.createElement('button');
-        pageBtn.className = `page-number ${i === currentPage ? 'active' : ''}`;
-        pageBtn.textContent = i;
-        pageBtn.onclick = () => changePage(i);
-        pageNumbers.appendChild(pageBtn);
+    for (let i = start; i <= end; i++) {
+        const btn = document.createElement('button');
+        btn.className = `page-number ${i === currentPage ? 'active' : ''}`;
+        btn.textContent = i;
+        btn.onclick = () => changePage(i);
+        pageNumbers.appendChild(btn);
     }
 }
 
@@ -345,7 +270,6 @@ async function changePage(page) {
     if (page < 1 || page > totalPages) return;
     currentPage = page;
     await loadBids();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 async function updateStatistics() {
@@ -369,8 +293,8 @@ function updateResultsCount(count) {
 
 function updateLastUpdateTime() {
     const now = new Date();
-    const formatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    document.getElementById('last-update').innerHTML = `<i class="fas fa-sync-alt"></i> 마지막 갱신: ${formatted}`;
+    const value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    document.getElementById('last-update').textContent = `마지막 갱신: ${value}`;
 }
 
 function showLoading(show) {
@@ -379,16 +303,10 @@ function showLoading(show) {
 
 function showEmptyState() {
     document.getElementById('empty-state').style.display = 'block';
-    document.getElementById('bids-list').innerHTML = '';
-    document.getElementById('pagination').style.display = 'none';
 }
 
 function hideEmptyState() {
     document.getElementById('empty-state').style.display = 'none';
-}
-
-function showError(message) {
-    alert(message);
 }
 
 function formatStatusLabel(status) {
@@ -403,29 +321,26 @@ function formatCurrency(amount) {
     return new Intl.NumberFormat('ko-KR', APP_CONFIG.CURRENCY_FORMAT).format(amount);
 }
 
-function formatNumber(num) {
-    return new Intl.NumberFormat('ko-KR').format(num);
+function formatNumber(value) {
+    return new Intl.NumberFormat('ko-KR').format(value || 0);
 }
 
-function formatDisplayDate(dateString) {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+function formatDisplayDate(value) {
+    if (!value) return '-';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '-';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function formatDisplayDateTime(dateTimeString) {
-    if (!dateTimeString) return '-';
-    const date = new Date(dateTimeString);
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+function formatDisplayDateTime(value) {
+    if (!value) return '-';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '-';
+    return `${formatDisplayDate(value)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-function escapeHtml(text) {
-    if (!text) return '';
+function escapeHtml(input) {
+    if (input == null) return '';
     const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#039;' };
-    return String(text).replace(/[&<>"']/g, (m) => map[m]);
+    return String(input).replace(/[&<>"']/g, (m) => map[m]);
 }
-
-window.onclick = function(event) {
-    const modal = document.getElementById('bid-modal');
-    if (event.target === modal) closeBidModal();
-};
