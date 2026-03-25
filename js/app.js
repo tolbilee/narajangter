@@ -169,9 +169,15 @@ async function runRefresh(days, options = {}) {
         });
 
         const text = await response.text();
-        const result = text ? JSON.parse(text) : {};
+        let result = {};
+        try {
+            result = text ? JSON.parse(text) : {};
+        } catch {
+            result = {};
+        }
         if (!response.ok || !result.success) {
-            throw new Error(result.error || `HTTP ${response.status}`);
+            const snippet = String(text || '').replace(/\s+/g, ' ').slice(0, 200);
+            throw new Error(result.error || `HTTP ${response.status}${snippet ? `: ${snippet}` : ''}`);
         }
 
         currentDataWindowDays = days;
@@ -302,7 +308,6 @@ async function loadBids() {
             if (!error && Array.isArray(data)) {
                 const sorted = sortRowsByBidDateSmart(data, state.sortOrder);
                 data = sorted.slice(from, to + 1);
-                count = sorted.length;
             }
         } else {
             query = query.order(state.sortBy, { ascending: state.sortOrder === 'asc' });
@@ -319,7 +324,7 @@ async function loadBids() {
         totalCount = count || 0;
         renderRows(data || []);
         renderPagination();
-        updateResultsCount(totalCount);
+        updateResultsSummary(totalCount);
 
         if (!data || data.length === 0) {
             showEmptyState();
@@ -439,10 +444,17 @@ async function updateStatistics() {
         const { count: totalBids } = await query;
         document.getElementById('total-bids').textContent = `${formatNumber(totalBids || 0)}건`;
         document.getElementById('total-bids-label').textContent = `최근 ${currentDataWindowDays}일간 전체 공고`;
-        updateResultsCount(totalCount);
+        updateResultsSummary(totalCount);
     } catch (error) {
         console.error('통계 업데이트 실패:', error);
     }
+}
+
+function updateResultsSummary(count) {
+    const keyword = String(state.keyword || '').trim();
+    const label = keyword ? `검색 키워드: ${keyword}` : '검색 결과';
+    document.getElementById('results-keyword-label').textContent = label;
+    document.getElementById('results-count').textContent = `${formatNumber(count)}건`;
 }
 
 function updateResultsCount(count) {

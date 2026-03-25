@@ -213,6 +213,7 @@ async function fetchDailyItemsAllPages(
   inqryEndDt: string,
   numOfRows = 100,
   maxPages = 200,
+  deadlineTs = Number.POSITIVE_INFINITY,
 ): Promise<{ dayItems: any[], attempts: G2BAttemptResult[], endpoint: string, encodedKey: boolean }> {
   const first = await callG2BWithFallbacks(apiKey, inqryBgnDt, inqryEndDt, 1, numOfRows)
   const attempts: G2BAttemptResult[] = [...first.attempts.slice(-4)]
@@ -224,6 +225,7 @@ async function fetchDailyItemsAllPages(
 
   if (totalPages > 1) {
     for (let pageNo = 2; pageNo <= totalPages; pageNo++) {
+      if (Date.now() > deadlineTs) break
       try {
         const page = await callG2BWithFallbacks(apiKey, inqryBgnDt, inqryEndDt, pageNo, numOfRows)
         const pageItems = normalizeItems(page.data?.response?.body?.items)
@@ -242,6 +244,7 @@ async function fetchDailyItemsAllPages(
     }
   } else if (totalPages === 0) {
     for (let pageNo = 2; pageNo <= maxPages; pageNo++) {
+      if (Date.now() > deadlineTs) break
       try {
         const page = await callG2BWithFallbacks(apiKey, inqryBgnDt, inqryEndDt, pageNo, numOfRows)
         const pageItems = normalizeItems(page.data?.response?.body?.items)
@@ -304,15 +307,26 @@ serve(async (req) => {
     let lastSuccessEncoded = true
 
     const dayOffsets = Array.from({ length: daysToFetch }, (_, i) => i)
-    const maxParallel = 3
+    const maxParallel = requestedDays === 30 ? 1 : 2
     const numOfRows = 100
-    const maxPages = 200
+    const maxPages = requestedDays === 30 ? 20 : 60
+    const deadlineTs = Date.now() + 60000
     for (let start = 0; start < dayOffsets.length; start += maxParallel) {
+      if (Date.now() > deadlineTs) {
+        debugAttempts.push({
+          endpoint: 'sync-budget',
+          encodedKey: true,
+          keyParamName: 'serviceKey',
+          httpStatus: 0,
+          resultMsg: 'Stopped by time budget before processing all day windows',
+        })
+        break
+      }
       const offsetBatch = dayOffsets.slice(start, start + maxParallel)
       const batchResults = await Promise.all(offsetBatch.map(async (offset) => {
         const { dayBgn, dayEnd } = createDayWindow(today, offset)
         try {
-          const g2b = await fetchDailyItemsAllPages(G2B_API_KEY, dayBgn, dayEnd, numOfRows, maxPages)
+          const g2b = await fetchDailyItemsAllPages(G2B_API_KEY, dayBgn, dayEnd, numOfRows, maxPages, deadlineTs)
           const dayItems = g2b.dayItems
           return {
             ok: true as const,
