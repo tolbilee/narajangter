@@ -35,6 +35,12 @@
             <h2>필터</h2>
             <label for="keyword-search">키워드</label>
             <input id="keyword-search" type="text" placeholder="공고명, 기관명">
+            <div class="popular-keywords" aria-label="인기 키워드">
+                <button type="button" class="kw-chip kw-chip--event" data-keyword="행사"><span class="kw-icon">🎈</span>행사</button>
+                <button type="button" class="kw-chip kw-chip--school" data-keyword="학교"><span class="kw-icon">🎓</span>학교</button>
+                <button type="button" class="kw-chip kw-chip--expo" data-keyword="전시"><span class="kw-icon">🖼️</span>전시</button>
+                <button type="button" class="kw-chip kw-chip--ops" data-keyword="운영"><span class="kw-icon">⚙️</span>운영</button>
+            </div>
 
             <label for="start-date">공고일 시작</label>
             <input id="start-date" type="date">
@@ -98,9 +104,7 @@
 
     <div id="global-loading" class="global-loading" style="display:none;">
         <div class="global-loading-card">
-            <div class="rings">
-                <span></span><span></span><span></span>
-            </div>
+            <div id="loading-rocket" class="loading-rocket" aria-hidden="true"></div>
             <h3>데이터 동기화 중</h3>
             <p id="global-loading-text">최근 데이터를 정리하고 있습니다...</p>
             <p id="global-loading-eta">예상 남은 시간 계산 중...</p>

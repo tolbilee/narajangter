@@ -35,6 +35,25 @@ function initTitleRocketIcon() {
     });
 }
 
+function initLoadingRocketIcon() {
+    const el = document.getElementById('loading-rocket');
+    if (!el) return;
+    if (!window.lottie) {
+        el.textContent = '\uD83D\uDE80';
+        return;
+    }
+    window.lottie.loadAnimation({
+        container: el,
+        renderer: 'svg',
+        loop: true,
+        autoplay: true,
+        path: 'rocket_15557778.json',
+        rendererSettings: {
+            preserveAspectRatio: 'xMidYMid meet',
+        },
+    });
+}
+
 function initSupabase() {
     try {
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -50,6 +69,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!initSupabase()) return;
 
     initTitleRocketIcon();
+    initLoadingRocketIcon();
     initEventListeners();
     setDefaultDates(7);
     syncDateFilterState();
@@ -77,6 +97,17 @@ function initEventListeners() {
         state.keyword = e.target.value.trim();
         currentPage = 1;
         await loadBids();
+    });
+    document.querySelectorAll('.kw-chip[data-keyword]').forEach((chip) => {
+        chip.addEventListener('click', async (e) => {
+            const keyword = String(e.currentTarget.dataset.keyword || '').trim();
+            const input = document.getElementById('keyword-search');
+            if (!input || !keyword) return;
+            input.value = keyword;
+            state.keyword = keyword;
+            currentPage = 1;
+            await loadBids();
+        });
     });
     document.getElementById('start-date').addEventListener('change', async () => {
         syncDateFilterState();
