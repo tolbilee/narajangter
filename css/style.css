@@ -357,7 +357,11 @@ tbody tr.is-selected {
 }
 
 .topbar-left h1 i {
-    color: #0ea5e9;
+    background: linear-gradient(135deg, #f97316 0%, #ef4444 35%, #8b5cf6 70%, #06b6d4 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin-right: 4px;
 }
 
 #open-detail-btn {
