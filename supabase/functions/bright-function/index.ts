@@ -12,6 +12,7 @@ type G2BAttemptResult = {
   endpoint: string
   encodedKey: boolean
   keyParamName: string
+  pageNo?: number
   httpStatus: number
   resultCode?: string
   resultMsg?: string
@@ -21,6 +22,8 @@ type G2BAttemptResult = {
 type G2BSuccess = {
   endpoint: string
   encodedKey: boolean
+  keyParamName: string
+  pageNo: number
   data: any
   attempts: G2BAttemptResult[]
 }
@@ -41,6 +44,8 @@ function buildG2BUrl(
   inqryEndDt: string,
   encodedKey: boolean,
   keyParamName: string,
+  pageNo = 1,
+  numOfRows = 100,
 ): string {
   const serviceKeyValue = encodedKey ? encodeURIComponent(apiKey) : apiKey
 
@@ -50,8 +55,8 @@ function buildG2BUrl(
       `&inqryDiv=1` +
       `&inqryBgnDt=${inqryBgnDt}` +
       `&inqryEndDt=${inqryEndDt}` +
-      `&numOfRows=100` +
-      `&pageNo=1` +
+      `&numOfRows=${numOfRows}` +
+      `&pageNo=${pageNo}` +
       `&type=json`
   }
 
@@ -59,9 +64,19 @@ function buildG2BUrl(
     `?${keyParamName}=${serviceKeyValue}` +
     `&bidNtceBgnDt=${inqryBgnDt}` +
     `&bidNtceEndDt=${inqryEndDt}` +
-    `&numOfRows=100` +
-    `&pageNo=1` +
+    `&numOfRows=${numOfRows}` +
+    `&pageNo=${pageNo}` +
     `&type=json`
+}
+
+function extractTotalCount(data: any): number {
+  const body = data?.response?.body
+  const candidates = [body?.totalCount, body?.totCnt, body?.totalCnt]
+  for (const value of candidates) {
+    const n = Number(value)
+    if (Number.isFinite(n) && n >= 0) return n
+  }
+  return 0
 }
 
 function extractHeader(data: any): { resultCode?: string, resultMsg?: string } {
@@ -132,6 +147,8 @@ async function callG2BWithFallbacks(
   apiKey: string,
   inqryBgnDt: string,
   inqryEndDt: string,
+  pageNo = 1,
+  numOfRows = 100,
 ): Promise<G2BSuccess> {
   const endpoints = [
     'ad/BidPublicInfoService04/getBidPblancListInfoServc04',
@@ -146,7 +163,7 @@ async function callG2BWithFallbacks(
   for (const endpoint of endpoints) {
     for (const encodedKey of keyModes) {
       for (const keyParamName of keyParamNames) {
-        const url = buildG2BUrl(endpoint, apiKey, inqryBgnDt, inqryEndDt, encodedKey, keyParamName)
+        const url = buildG2BUrl(endpoint, apiKey, inqryBgnDt, inqryEndDt, encodedKey, keyParamName, pageNo, numOfRows)
         let httpStatus = 0
         try {
           const response = await fetch(url, { headers: { 'Accept': 'application/json' } })
@@ -155,7 +172,7 @@ async function callG2BWithFallbacks(
           const responseSnippet = responseText.replace(/\s+/g, ' ').slice(0, 240)
 
           if (!response.ok) {
-            attempts.push({ endpoint, encodedKey, keyParamName, httpStatus, responseSnippet })
+            attempts.push({ endpoint, encodedKey, keyParamName, pageNo, httpStatus, responseSnippet })
             continue
           }
 
@@ -163,21 +180,22 @@ async function callG2BWithFallbacks(
           try {
             data = JSON.parse(responseText)
           } catch {
-            attempts.push({ endpoint, encodedKey, keyParamName, httpStatus, resultMsg: 'JSON parse failed', responseSnippet })
+            attempts.push({ endpoint, encodedKey, keyParamName, pageNo, httpStatus, resultMsg: 'JSON parse failed', responseSnippet })
             continue
           }
 
           const { resultCode, resultMsg } = extractHeader(data)
-          attempts.push({ endpoint, encodedKey, keyParamName, httpStatus, resultCode, resultMsg, responseSnippet })
+          attempts.push({ endpoint, encodedKey, keyParamName, pageNo, httpStatus, resultCode, resultMsg, responseSnippet })
 
           if (resultCode === '00') {
-            return { endpoint, encodedKey, data, attempts }
+            return { endpoint, encodedKey, keyParamName, pageNo, data, attempts }
           }
         } catch (error: any) {
           attempts.push({
             endpoint,
             encodedKey,
             keyParamName,
+            pageNo,
             httpStatus,
             resultMsg: error?.message || 'Fetch failed',
           })
@@ -187,6 +205,61 @@ async function callG2BWithFallbacks(
   }
 
   throw new Error(`G2B request failed on all endpoint/key combinations: ${JSON.stringify(attempts.slice(-12))}`)
+}
+
+async function fetchDailyItemsAllPages(
+  apiKey: string,
+  inqryBgnDt: string,
+  inqryEndDt: string,
+  numOfRows = 100,
+  maxPages = 200,
+): Promise<{ dayItems: any[], attempts: G2BAttemptResult[], endpoint: string, encodedKey: boolean }> {
+  const first = await callG2BWithFallbacks(apiKey, inqryBgnDt, inqryEndDt, 1, numOfRows)
+  const attempts: G2BAttemptResult[] = [...first.attempts.slice(-4)]
+  const allItems: any[] = [...normalizeItems(first.data?.response?.body?.items)]
+
+  const totalCount = extractTotalCount(first.data)
+  const totalPagesFromCount = totalCount > 0 ? Math.ceil(totalCount / numOfRows) : 0
+  const totalPages = totalPagesFromCount > 0 ? Math.min(Math.max(totalPagesFromCount, 1), maxPages) : 0
+
+  if (totalPages > 1) {
+    for (let pageNo = 2; pageNo <= totalPages; pageNo++) {
+      try {
+        const page = await callG2BWithFallbacks(apiKey, inqryBgnDt, inqryEndDt, pageNo, numOfRows)
+        const pageItems = normalizeItems(page.data?.response?.body?.items)
+        allItems.push(...pageItems)
+        attempts.push(...page.attempts.slice(-2))
+      } catch (error: any) {
+        attempts.push({
+          endpoint: first.endpoint,
+          encodedKey: first.encodedKey,
+          keyParamName: first.keyParamName,
+          pageNo,
+          httpStatus: 0,
+          resultMsg: String(error?.message || 'Page fetch failed').slice(0, 240),
+        })
+      }
+    }
+  } else if (totalPages === 0) {
+    for (let pageNo = 2; pageNo <= maxPages; pageNo++) {
+      try {
+        const page = await callG2BWithFallbacks(apiKey, inqryBgnDt, inqryEndDt, pageNo, numOfRows)
+        const pageItems = normalizeItems(page.data?.response?.body?.items)
+        allItems.push(...pageItems)
+        attempts.push(...page.attempts.slice(-2))
+        if (pageItems.length < numOfRows) break
+      } catch {
+        break
+      }
+    }
+  }
+
+  return {
+    dayItems: allItems,
+    attempts,
+    endpoint: first.endpoint,
+    encodedKey: first.encodedKey,
+  }
 }
 
 serve(async (req) => {
@@ -232,18 +305,20 @@ serve(async (req) => {
 
     const dayOffsets = Array.from({ length: daysToFetch }, (_, i) => i)
     const maxParallel = 3
+    const numOfRows = 100
+    const maxPages = 200
     for (let start = 0; start < dayOffsets.length; start += maxParallel) {
       const offsetBatch = dayOffsets.slice(start, start + maxParallel)
       const batchResults = await Promise.all(offsetBatch.map(async (offset) => {
         const { dayBgn, dayEnd } = createDayWindow(today, offset)
         try {
-          const g2b = await callG2BWithFallbacks(G2B_API_KEY, dayBgn, dayEnd)
-          const dayItems = normalizeItems(g2b.data?.response?.body?.items)
+          const g2b = await fetchDailyItemsAllPages(G2B_API_KEY, dayBgn, dayEnd, numOfRows, maxPages)
+          const dayItems = g2b.dayItems
           return {
             ok: true as const,
             offset,
             dayItems,
-            attempts: g2b.attempts.slice(-3),
+            attempts: g2b.attempts.slice(-8),
             endpoint: g2b.endpoint,
             encodedKey: g2b.encodedKey,
           }
