@@ -28,6 +28,8 @@ type G2BSuccess = {
   attempts: G2BAttemptResult[]
 }
 
+const FOCUS_KEYWORDS = ['행사', '학교', '축제', '전시', '운영']
+
 function formatDateTimeCompact(date: Date, endOfDay = false): string {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -118,6 +120,25 @@ function dedupeItemsByBidNotice(items: any[]): any[] {
     }
   }
   return Array.from(map.values())
+}
+
+function matchesFocusKeywords(item: any): boolean {
+  const text = [
+    item?.bidNtceNm,
+    item?.bidntceNm,
+    item?.ntceInsttNm,
+    item?.dminsttNm,
+    item?.dmndInsttNm,
+    item?.ntceKindNm,
+    item?.bidNm,
+  ]
+    .filter(Boolean)
+    .map((v: any) => String(v))
+    .join(' ')
+    .toLowerCase()
+
+  if (!text) return false
+  return FOCUS_KEYWORDS.some((kw) => text.includes(kw.toLowerCase()))
 }
 
 function chunkArray<T>(items: T[], size: number): T[][] {
@@ -305,6 +326,8 @@ serve(async (req) => {
     const debugAttempts: G2BAttemptResult[] = []
     let lastSuccessEndpoint = ''
     let lastSuccessEncoded = true
+    let successfulDayFetches = 0
+    let quotaExceeded = false
 
     const dayOffsets = Array.from({ length: daysToFetch }, (_, i) => i)
     const maxParallel = requestedDays === 30 ? 1 : 2
@@ -335,17 +358,21 @@ serve(async (req) => {
             attempts: g2b.attempts.slice(-8),
             endpoint: g2b.endpoint,
             encodedKey: g2b.encodedKey,
+            quotaExceeded: false,
           }
         } catch (dayError: any) {
+          const msg = String(dayError?.message || 'Daily fetch failed')
+          const isQuota = msg.includes('429') || msg.toLowerCase().includes('quota exceeded')
           return {
             ok: false as const,
             offset,
+            quotaExceeded: isQuota,
             attempts: [{
               endpoint: `daily-window-${offset}`,
               encodedKey: true,
               keyParamName: 'serviceKey',
               httpStatus: 0,
-              resultMsg: String(dayError?.message || 'Daily fetch failed').slice(0, 240),
+              resultMsg: msg.slice(0, 240),
             } as G2BAttemptResult],
           }
         }
@@ -357,11 +384,50 @@ serve(async (req) => {
           allItems.push(...result.dayItems)
           lastSuccessEndpoint = result.endpoint
           lastSuccessEncoded = result.encodedKey
+          successfulDayFetches += 1
+        } else if (result.quotaExceeded) {
+          quotaExceeded = true
         }
+      }
+
+      if (quotaExceeded) {
+        debugAttempts.push({
+          endpoint: 'sync-stop',
+          encodedKey: true,
+          keyParamName: 'serviceKey',
+          httpStatus: 429,
+          resultMsg: 'Stopped early due to API token quota exceeded',
+        })
+        break
       }
     }
 
     const items = dedupeItemsByBidNotice(allItems)
+    const filteredItems = items.filter(matchesFocusKeywords)
+
+    if (successfulDayFetches === 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: quotaExceeded
+            ? '나라장터 API 일일 호출 한도(쿼터)를 초과했습니다. 잠시 후 다시 시도해주세요.'
+            : '나라장터 API에서 데이터를 읽지 못했습니다. 잠시 후 다시 시도해주세요.',
+          insertedCount: 0,
+          totalItems: 0,
+          sourceItems: items.length,
+          keywords: FOCUS_KEYWORDS,
+          debug: {
+            endpoint: lastSuccessEndpoint,
+            encodedKey: lastSuccessEncoded,
+            attempts: debugAttempts.slice(-12),
+          },
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      )
+    }
 
     if (resetAll) {
       const { error: deleteError } = await supabase
@@ -384,7 +450,7 @@ serve(async (req) => {
       }
     }
 
-    if (items.length === 0) {
+    if (filteredItems.length === 0) {
       return new Response(
         JSON.stringify({
           success: true,
@@ -444,7 +510,7 @@ serve(async (req) => {
       return Number.isNaN(parsed) ? 0 : parsed
     }
 
-    const bidRows = items
+    const bidRows = filteredItems
       .map((item) => ({
         bid_notice_no: item.bidNtceNo || item.bidntceNo || '',
         bid_notice_name: item.bidNtceNm || item.bidntceNm || '',
@@ -489,7 +555,9 @@ serve(async (req) => {
         message: `공고 ${insertedCount}건 저장 완료${errorCount > 0 ? ` (${errorCount}건 실패)` : ''}`,
         insertedCount,
         errorCount,
-        totalItems: items.length,
+        totalItems: filteredItems.length,
+        sourceItems: items.length,
+        keywords: FOCUS_KEYWORDS,
         resetAll,
         dateRange: {
           start: formatDateTimeCompact(startDate, false),

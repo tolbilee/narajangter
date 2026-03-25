@@ -190,7 +190,9 @@ async function runRefresh(days, options = {}) {
         // 성공 팝업은 UX 간소화를 위해 표시하지 않는다.
     } catch (error) {
         console.error('갱신 실패:', error);
-        alert(`데이터 갱신 실패\n${error.message}`);
+        if (!silent) {
+            alert(`데이터 갱신 실패\n${error.message}`);
+        }
     } finally {
         if (!silent) {
             showGlobalLoading(false);
