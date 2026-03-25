@@ -6,6 +6,7 @@ let currentDataWindowDays = 7;
 let loadingTicker = null;
 let loadingStartAt = 0;
 let loadingExpectedMs = 0;
+let latestLoadRequestId = 0;
 
 const state = {
     keyword: '',
@@ -20,6 +21,7 @@ function initSupabase() {
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         return true;
     } catch (error) {
+        if (requestId !== latestLoadRequestId) return;
         console.error('Supabase 초기화 실패:', error);
         alert('Supabase 연결에 실패했습니다.');
         return false;
@@ -189,6 +191,7 @@ function updateSortHeaderUI() {
 }
 
 async function loadBids() {
+    const requestId = ++latestLoadRequestId;
     showLoading(true);
     hideEmptyState();
 
@@ -214,18 +217,25 @@ async function loadBids() {
 
         const { data, error, count } = await query;
         if (error) throw error;
+        if (requestId !== latestLoadRequestId) return;
 
         totalCount = count || 0;
         renderRows(data || []);
         renderPagination();
         updateResultsCount(totalCount);
 
-        if (!data || data.length === 0) showEmptyState();
+        if (!data || data.length === 0) {
+            showEmptyState();
+        } else {
+            hideEmptyState();
+        }
     } catch (error) {
         console.error('목록 조회 실패:', error);
         alert('데이터를 불러오지 못했습니다.');
     } finally {
-        showLoading(false);
+        if (requestId === latestLoadRequestId) {
+            showLoading(false);
+        }
     }
 }
 

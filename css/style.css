@@ -44,10 +44,26 @@ body {
     font-weight: 800;
 }
 
+.topbar-left h1::after {
+    content: " by stone";
+    margin-left: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    vertical-align: middle;
+}
+
 .topbar-left p {
-    margin: 4px 0 0;
+    margin: 0;
     color: var(--ink-soft);
     font-size: 13px;
+}
+
+#last-update {
+    position: absolute;
+    right: 24px;
+    top: 50%;
+    transform: translateY(-50%);
 }
 
 .kpi-row {
@@ -209,7 +225,7 @@ tbody tr:hover {
 }
 
 tbody tr.is-selected {
-    background: #e2eeff;
+    background: #fef3c7;
 }
 
 .title-cell {
@@ -462,5 +478,13 @@ tbody tr.is-selected {
     }
     .topbar {
         padding: 14px 12px;
+    }
+    .topbar-left h1::after {
+        font-size: 11px;
+        margin-left: 6px;
+    }
+    #last-update {
+        right: 12px;
+        font-size: 12px;
     }
 }
