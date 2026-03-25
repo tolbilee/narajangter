@@ -16,6 +16,25 @@ const state = {
     sortOrder: 'desc',
 };
 
+function initTitleRocketIcon() {
+    const el = document.getElementById('title-rocket');
+    if (!el) return;
+    if (!window.lottie) {
+        el.textContent = '🚀';
+        return;
+    }
+    window.lottie.loadAnimation({
+        container: el,
+        renderer: 'svg',
+        loop: true,
+        autoplay: true,
+        path: 'rocket_15557778.json',
+        rendererSettings: {
+            preserveAspectRatio: 'xMidYMid meet',
+        },
+    });
+}
+
 function initSupabase() {
     try {
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -30,6 +49,7 @@ function initSupabase() {
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initSupabase()) return;
 
+    initTitleRocketIcon();
     initEventListeners();
     setDefaultDates(7);
     syncDateFilterState();
