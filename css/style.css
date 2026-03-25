@@ -217,6 +217,7 @@ tbody td {
 
 .amount-cell {
     font-weight: 800;
+    text-align: right;
 }
 
 tbody tr {
@@ -347,12 +348,16 @@ tbody tr.is-selected {
     margin-left: 6px;
     padding: 1px 6px;
     border-radius: 999px;
-    background: #fee2e2;
-    color: #dc2626;
+    background: #dc2626;
+    color: #ffffff;
     font-size: 10px;
     font-weight: 800;
     line-height: 1.4;
     vertical-align: middle;
+}
+
+.topbar-left h1 i {
+    color: #0ea5e9;
 }
 
 #open-detail-btn {
