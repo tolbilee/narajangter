@@ -26,16 +26,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!initSupabase()) return;
 
     initEventListeners();
-    setDefaultDates(30);
+    setDefaultDates(7);
     syncDateFilterState();
-    await refreshDashboard();
+
+    // 정책: 접속할 때마다 기존 데이터를 정리하고 최근 7일을 다시 수집한다.
+    await runRefresh(7, { silent: true });
 });
 
 function initEventListeners() {
     document.getElementById('search-btn').addEventListener('click', onSearch);
     document.getElementById('apply-filter-btn').addEventListener('click', onApplyFilter);
     document.getElementById('reset-btn').addEventListener('click', onReset);
-    document.getElementById('refresh-data-btn').addEventListener('click', onRefreshData);
+    document.getElementById('refresh-data-btn').addEventListener('click', onRefreshClick);
     document.getElementById('sort-select').addEventListener('change', onSortChange);
     document.getElementById('prev-page').addEventListener('click', () => changePage(currentPage - 1));
     document.getElementById('next-page').addEventListener('click', () => changePage(currentPage + 1));
@@ -55,6 +57,55 @@ function initEventListeners() {
     });
 }
 
+async function onRefreshClick() {
+    const days = Number(document.getElementById('refresh-days-select').value || 7);
+    await runRefresh(days, { silent: false });
+}
+
+async function runRefresh(days, options = {}) {
+    const { silent = false } = options;
+    const btn = document.getElementById('refresh-data-btn');
+
+    try {
+        btn.disabled = true;
+        const response = await fetch(FETCH_BIDS_FUNCTION_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({
+                days,
+                resetAll: true,
+            }),
+        });
+
+        const text = await response.text();
+        const result = text ? JSON.parse(text) : {};
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || `HTTP ${response.status}`);
+        }
+
+        if (!silent) {
+            alert(`갱신 완료\n${result.message}\n저장: ${result.insertedCount || 0}/${result.totalItems || 0}`);
+        }
+
+        // 기본 필터도 선택한 갱신 범위에 맞춘다.
+        setDefaultDates(days);
+        syncDateFilterState();
+        await refreshDashboard();
+    } catch (error) {
+        console.error('갱신 실패:', error);
+        if (!silent) {
+            alert(`데이터 갱신 실패\n${error.message}`);
+        } else {
+            alert(`초기 데이터 동기화 실패\n${error.message}`);
+        }
+    } finally {
+        btn.disabled = false;
+    }
+}
+
 function setDefaultDates(days) {
     const end = new Date();
     const start = new Date();
@@ -68,11 +119,11 @@ function syncDateFilterState() {
     state.endDate = document.getElementById('end-date').value;
 }
 
-function formatDate(d) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+function formatDate(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
 }
 
 async function refreshDashboard() {
@@ -96,10 +147,10 @@ async function onApplyFilter() {
 async function onReset() {
     document.getElementById('keyword-search').value = '';
     document.getElementById('sort-select').value = 'notice_desc';
-    setDefaultDates(30);
     state.keyword = '';
     state.sortBy = 'notice_date';
     state.sortOrder = 'desc';
+    setDefaultDates(7);
     syncDateFilterState();
     currentPage = 1;
     await loadBids();
@@ -113,38 +164,10 @@ async function onSortChange(e) {
     await loadBids();
 }
 
-async function onRefreshData() {
-    const btn = document.getElementById('refresh-data-btn');
-    const days = Number(document.getElementById('refresh-days-select').value || 7);
-    try {
-        btn.disabled = true;
-        const response = await fetch(FETCH_BIDS_FUNCTION_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            },
-            body: JSON.stringify({ days }),
-        });
-        const text = await response.text();
-        const result = text ? JSON.parse(text) : {};
-        if (!response.ok || !result.success) {
-            throw new Error(result.error || `HTTP ${response.status}`);
-        }
-
-        alert(`갱신 완료\n${result.message}\n저장: ${result.insertedCount || 0}/${result.totalItems || 0}`);
-        await refreshDashboard();
-    } catch (error) {
-        console.error('갱신 실패:', error);
-        alert(`데이터 갱신 실패\n${error.message}`);
-    } finally {
-        btn.disabled = false;
-    }
-}
-
 async function loadBids() {
     showLoading(true);
     hideEmptyState();
+
     try {
         let query = supabaseClient.from('bids').select('*', { count: 'exact' });
 
@@ -173,9 +196,7 @@ async function loadBids() {
         renderPagination();
         updateResultsCount(totalCount);
 
-        if (!data || data.length === 0) {
-            showEmptyState();
-        }
+        if (!data || data.length === 0) showEmptyState();
     } catch (error) {
         console.error('목록 조회 실패:', error);
         alert('데이터를 불러오지 못했습니다.');
@@ -217,7 +238,6 @@ function selectBid(bid, rowEl) {
 function renderDetail(bid) {
     const body = document.getElementById('detail-body');
     const openBtn = document.getElementById('open-detail-btn');
-    const statusLabel = formatStatusLabel(bid.bid_status);
     body.innerHTML = `
         <div class="detail-item"><strong>공고명</strong>${escapeHtml(bid.bid_notice_name || '-')}</div>
         <div class="detail-item"><strong>공고번호</strong>${escapeHtml(bid.bid_notice_no || '-')}</div>
@@ -227,16 +247,14 @@ function renderDetail(bid) {
         <div class="detail-item"><strong>입찰마감</strong>${formatDisplayDateTime(bid.bid_date)}</div>
         <div class="detail-item"><strong>계약방식</strong>${escapeHtml(bid.contract_type || '-')}</div>
         <div class="detail-item"><strong>추정금액</strong>${formatCurrency(bid.bid_amount)}</div>
-        <div class="detail-item"><strong>상태</strong>${escapeHtml(statusLabel)}</div>
+        <div class="detail-item"><strong>상태</strong>${escapeHtml(formatStatusLabel(bid.bid_status))}</div>
         <div class="detail-item"><strong>설명</strong>${escapeHtml(bid.description || '-')}</div>
     `;
     openBtn.style.display = bid.detail_url ? 'inline-flex' : 'none';
 }
 
 function openSelectedBidUrl() {
-    if (selectedBid?.detail_url) {
-        window.open(selectedBid.detail_url, '_blank');
-    }
+    if (selectedBid?.detail_url) window.open(selectedBid.detail_url, '_blank');
 }
 
 function renderPagination() {
@@ -255,7 +273,6 @@ function renderPagination() {
     pageNumbers.innerHTML = '';
     const start = Math.max(1, currentPage - 2);
     const end = Math.min(totalPages, start + 4);
-
     for (let i = start; i <= end; i++) {
         const btn = document.createElement('button');
         btn.className = `page-number ${i === currentPage ? 'active' : ''}`;

@@ -193,12 +193,15 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
     let requestedDays = 7
+    let resetAll = true
     if (req.method === 'POST') {
       try {
         const body = await req.json()
         if (body?.days === 30 || body?.days === '30') requestedDays = 30
+        if (body?.resetAll === false) resetAll = false
       } catch {
         requestedDays = 7
+        resetAll = true
       }
     }
 
@@ -233,6 +236,16 @@ serve(async (req) => {
     }
 
     const items = dedupeItemsByBidNotice(allItems)
+
+    if (resetAll) {
+      const { error: deleteError } = await supabase
+        .from('bids')
+        .delete()
+        .neq('bid_notice_no', '')
+      if (deleteError) {
+        throw new Error(`기존 데이터 삭제 실패: ${deleteError.message}`)
+      }
+    }
 
     if (items.length === 0) {
       return new Response(
@@ -321,6 +334,7 @@ serve(async (req) => {
         insertedCount,
         errorCount,
         totalItems: items.length,
+        resetAll,
         dateRange: {
           start: formatDateTimeCompact(startDate, false),
           end: formatDateTimeCompact(today, true),
