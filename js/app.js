@@ -143,6 +143,7 @@ function initEventListeners() {
         });
     });
 
+    updateQuickDateButtons();
     updateSortHeaderUI();
 }
 
@@ -174,6 +175,7 @@ async function runRefresh(days, options = {}) {
         }
 
         currentDataWindowDays = days;
+        updateQuickDateButtons();
         setDefaultDates(days);
         syncDateFilterState();
         await refreshDashboard();
@@ -196,6 +198,16 @@ function setDefaultDates(days) {
     start.setDate(start.getDate() - days);
     document.getElementById('start-date').value = formatDate(start);
     document.getElementById('end-date').value = formatDate(end);
+}
+
+function updateQuickDateButtons() {
+    document.querySelectorAll('.quick-dates .btn[data-days]').forEach((btn) => {
+        const days = Number(btn.dataset.days || 0);
+        const active = days === currentDataWindowDays;
+        btn.classList.toggle('btn-primary', active);
+        btn.classList.toggle('btn-secondary', !active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
 }
 
 function syncDateFilterState() {
