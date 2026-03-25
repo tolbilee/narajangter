@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="나라장터 입찰 공고를 빠르게 탐색하고 갱신하는 실무형 대시보드">
-    <title>나라장터 실무 대시보드</title>
+    <meta name="description" content="나만의 나라장터 정리노트">
+    <title>나만의 나라장터 정리노트</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,36 +14,19 @@
 <body>
     <header class="topbar">
         <div class="topbar-left">
-            <h1><i class="fas fa-bolt"></i> 나라장터 실무 대시보드</h1>
+            <h1><i class="fas fa-book-open"></i> 나만의 나라장터 정리노트</h1>
             <p id="last-update">마지막 갱신: 불러오는 중...</p>
-        </div>
-        <div class="topbar-actions">
-            <select id="refresh-days-select">
-                <option value="7">최근 7일 갱신</option>
-                <option value="30">최근 30일 갱신</option>
-            </select>
-            <button id="refresh-data-btn" class="btn btn-primary">
-                <i class="fas fa-rotate"></i> 데이터 갱신
-            </button>
         </div>
     </header>
 
     <section class="kpi-row">
         <article class="kpi-card">
-            <span>전체 공고</span>
-            <strong id="total-bids">0</strong>
+            <span id="total-bids-label">최근 7일간 전체 공고</span>
+            <strong id="total-bids">0건</strong>
         </article>
         <article class="kpi-card">
-            <span>진행중</span>
-            <strong id="active-bids">0</strong>
-        </article>
-        <article class="kpi-card">
-            <span>오늘 추가</span>
-            <strong id="today-bids">0</strong>
-        </article>
-        <article class="kpi-card">
-            <span>현재 필터 결과</span>
-            <strong id="results-count">검색결과: 0</strong>
+            <span id="results-keyword-label">검색 결과</span>
+            <strong id="results-count">0건</strong>
         </article>
     </section>
 
@@ -60,8 +43,8 @@
             <input id="end-date" type="date">
 
             <div class="quick-dates">
-                <button class="btn btn-outline btn-sm" data-days="7">최근 7일</button>
-                <button class="btn btn-outline btn-sm" data-days="30">최근 30일</button>
+                <button class="btn btn-primary btn-sm" data-days="7">최근 7일 불러오기</button>
+                <button class="btn btn-secondary btn-sm" data-days="30">최근 30일 불러오기</button>
             </div>
 
             <label for="sort-select">정렬</label>
@@ -76,7 +59,6 @@
 
             <div class="sidebar-actions">
                 <button id="search-btn" class="btn btn-primary">검색</button>
-                <button id="apply-filter-btn" class="btn btn-secondary">적용</button>
                 <button id="reset-btn" class="btn btn-outline">초기화</button>
             </div>
         </aside>
@@ -99,7 +81,7 @@
                             <th>공고명</th>
                             <th>공고기관</th>
                             <th>공고일</th>
-                            <th>입찰마감</th>
+                            <th>입찰 마감</th>
                             <th>추정금액</th>
                             <th>상태</th>
                         </tr>
@@ -117,13 +99,22 @@
 
         <aside class="detail-zone" id="detail-panel">
             <h2>공고 상세</h2>
-            <p class="detail-placeholder">테이블에서 공고를 선택하면 상세 정보가 표시됩니다.</p>
             <div id="detail-body"></div>
             <button id="open-detail-btn" class="btn btn-primary" style="display:none;">
                 나라장터에서 보기
             </button>
         </aside>
     </main>
+
+    <div id="global-loading" class="global-loading" style="display:none;">
+        <div class="global-loading-card">
+            <div class="rings">
+                <span></span><span></span><span></span>
+            </div>
+            <h3>데이터 동기화 중</h3>
+            <p id="global-loading-text">최근 데이터를 정리하고 있습니다...</p>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/config.js"></script>

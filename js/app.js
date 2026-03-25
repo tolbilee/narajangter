@@ -2,6 +2,7 @@ let supabaseClient;
 let currentPage = 1;
 let totalCount = 0;
 let selectedBid = null;
+let currentDataWindowDays = 7;
 
 const state = {
     keyword: '',
@@ -28,46 +29,54 @@ document.addEventListener('DOMContentLoaded', async () => {
     initEventListeners();
     setDefaultDates(7);
     syncDateFilterState();
-
-    // 정책: 접속할 때마다 기존 데이터를 정리하고 최근 7일을 다시 수집한다.
-    await runRefresh(7, { silent: true });
+    await runRefresh(7, {
+        silent: true,
+        loadingMessage: '최초 접속 데이터를 불러오는 중입니다...',
+    });
 });
 
 function initEventListeners() {
     document.getElementById('search-btn').addEventListener('click', onSearch);
-    document.getElementById('apply-filter-btn').addEventListener('click', onApplyFilter);
     document.getElementById('reset-btn').addEventListener('click', onReset);
-    document.getElementById('refresh-data-btn').addEventListener('click', onRefreshClick);
     document.getElementById('sort-select').addEventListener('change', onSortChange);
     document.getElementById('prev-page').addEventListener('click', () => changePage(currentPage - 1));
     document.getElementById('next-page').addEventListener('click', () => changePage(currentPage + 1));
     document.getElementById('keyword-search').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') onSearch();
     });
+    document.getElementById('keyword-search').addEventListener('input', async (e) => {
+        state.keyword = e.target.value.trim();
+        currentPage = 1;
+        await loadBids();
+    });
+    document.getElementById('start-date').addEventListener('change', async () => {
+        syncDateFilterState();
+        currentPage = 1;
+        await loadBids();
+    });
+    document.getElementById('end-date').addEventListener('change', async () => {
+        syncDateFilterState();
+        currentPage = 1;
+        await loadBids();
+    });
     document.getElementById('open-detail-btn').addEventListener('click', openSelectedBidUrl);
 
     document.querySelectorAll('.quick-dates .btn').forEach((btn) => {
         btn.addEventListener('click', async (e) => {
             const days = Number(e.currentTarget.dataset.days || 7);
-            setDefaultDates(days);
-            syncDateFilterState();
-            currentPage = 1;
-            await loadBids();
+            await runRefresh(days, {
+                silent: false,
+                loadingMessage: `최근 ${days}일 데이터를 다시 구성하고 있습니다...`,
+            });
         });
     });
 }
 
-async function onRefreshClick() {
-    const days = Number(document.getElementById('refresh-days-select').value || 7);
-    await runRefresh(days, { silent: false });
-}
-
 async function runRefresh(days, options = {}) {
-    const { silent = false } = options;
-    const btn = document.getElementById('refresh-data-btn');
+    const { silent = false, loadingMessage = '데이터를 동기화 중입니다...' } = options;
+    showGlobalLoading(true, loadingMessage);
 
     try {
-        btn.disabled = true;
         const response = await fetch(FETCH_BIDS_FUNCTION_URL, {
             method: 'POST',
             headers: {
@@ -86,23 +95,19 @@ async function runRefresh(days, options = {}) {
             throw new Error(result.error || `HTTP ${response.status}`);
         }
 
-        if (!silent) {
-            alert(`갱신 완료\n${result.message}\n저장: ${result.insertedCount || 0}/${result.totalItems || 0}`);
-        }
-
-        // 기본 필터도 선택한 갱신 범위에 맞춘다.
+        currentDataWindowDays = days;
         setDefaultDates(days);
         syncDateFilterState();
         await refreshDashboard();
+
+        if (!silent) {
+            alert(`갱신 완료\n${result.message}\n저장: ${result.insertedCount || 0}/${result.totalItems || 0}`);
+        }
     } catch (error) {
         console.error('갱신 실패:', error);
-        if (!silent) {
-            alert(`데이터 갱신 실패\n${error.message}`);
-        } else {
-            alert(`초기 데이터 동기화 실패\n${error.message}`);
-        }
+        alert(`데이터 갱신 실패\n${error.message}`);
     } finally {
-        btn.disabled = false;
+        showGlobalLoading(false);
     }
 }
 
@@ -138,19 +143,13 @@ async function onSearch() {
     await loadBids();
 }
 
-async function onApplyFilter() {
-    syncDateFilterState();
-    currentPage = 1;
-    await loadBids();
-}
-
 async function onReset() {
     document.getElementById('keyword-search').value = '';
     document.getElementById('sort-select').value = 'notice_desc';
     state.keyword = '';
     state.sortBy = 'notice_date';
     state.sortOrder = 'desc';
-    setDefaultDates(7);
+    setDefaultDates(currentDataWindowDays);
     syncDateFilterState();
     currentPage = 1;
     await loadBids();
@@ -238,16 +237,24 @@ function selectBid(bid, rowEl) {
 function renderDetail(bid) {
     const body = document.getElementById('detail-body');
     const openBtn = document.getElementById('open-detail-btn');
+    const statusText = escapeHtml(formatStatusLabel(bid.bid_status));
+
     body.innerHTML = `
         <div class="detail-item"><strong>공고명</strong>${escapeHtml(bid.bid_notice_name || '-')}</div>
         <div class="detail-item"><strong>공고번호</strong>${escapeHtml(bid.bid_notice_no || '-')}</div>
-        <div class="detail-item"><strong>공고기관</strong>${escapeHtml(bid.bid_notice_org || '-')}</div>
-        <div class="detail-item"><strong>수요기관</strong>${escapeHtml(bid.demand_org || '-')}</div>
-        <div class="detail-item"><strong>공고일</strong>${formatDisplayDate(bid.notice_date)}</div>
-        <div class="detail-item"><strong>입찰마감</strong>${formatDisplayDateTime(bid.bid_date)}</div>
-        <div class="detail-item"><strong>계약방식</strong>${escapeHtml(bid.contract_type || '-')}</div>
+        <div class="detail-grid-two">
+            <div class="detail-item"><strong>공고기관</strong>${escapeHtml(bid.bid_notice_org || '-')}</div>
+            <div class="detail-item"><strong>수요기관</strong>${escapeHtml(bid.demand_org || '-')}</div>
+        </div>
+        <div class="detail-grid-two">
+            <div class="detail-item"><strong>공고일</strong>${formatDisplayDate(bid.notice_date)}</div>
+            <div class="detail-item"><strong>입찰 마감</strong>${formatDisplayDateTime(bid.bid_date)}</div>
+        </div>
+        <div class="detail-grid-two">
+            <div class="detail-item"><strong>계약방식</strong>${escapeHtml(bid.contract_type || '-')}</div>
+            <div class="detail-item"><strong>상태</strong>${statusText}</div>
+        </div>
         <div class="detail-item"><strong>추정금액</strong>${formatCurrency(bid.bid_amount)}</div>
-        <div class="detail-item"><strong>상태</strong>${escapeHtml(formatStatusLabel(bid.bid_status))}</div>
         <div class="detail-item"><strong>설명</strong>${escapeHtml(bid.description || '-')}</div>
     `;
     openBtn.style.display = bid.detail_url ? 'inline-flex' : 'none';
@@ -292,20 +299,18 @@ async function changePage(page) {
 async function updateStatistics() {
     try {
         const { count: totalBids } = await supabaseClient.from('bids').select('*', { count: 'exact', head: true });
-        const { count: activeBids } = await supabaseClient.from('bids').select('*', { count: 'exact', head: true }).neq('bid_status', 'CLOSED');
-        const today = formatDate(new Date());
-        const { count: todayBids } = await supabaseClient.from('bids').select('*', { count: 'exact', head: true }).eq('notice_date', today);
-
-        document.getElementById('total-bids').textContent = formatNumber(totalBids || 0);
-        document.getElementById('active-bids').textContent = formatNumber(activeBids || 0);
-        document.getElementById('today-bids').textContent = formatNumber(todayBids || 0);
+        document.getElementById('total-bids').textContent = `${formatNumber(totalBids || 0)}건`;
+        document.getElementById('total-bids-label').textContent = `최근 ${currentDataWindowDays}일간 전체 공고`;
+        updateResultsCount(totalCount);
     } catch (error) {
         console.error('통계 업데이트 실패:', error);
     }
 }
 
 function updateResultsCount(count) {
-    document.getElementById('results-count').textContent = `검색결과: ${formatNumber(count)}`;
+    const keyword = state.keyword || '(전체)';
+    document.getElementById('results-keyword-label').textContent = `검색 키워드: ${keyword}`;
+    document.getElementById('results-count').textContent = `${formatNumber(count)}건`;
 }
 
 function updateLastUpdateTime() {
@@ -316,6 +321,14 @@ function updateLastUpdateTime() {
 
 function showLoading(show) {
     document.getElementById('loading').style.display = show ? 'block' : 'none';
+}
+
+function showGlobalLoading(show, text = '데이터를 동기화 중입니다...') {
+    const overlay = document.getElementById('global-loading');
+    const label = document.getElementById('global-loading-text');
+    if (!overlay || !label) return;
+    label.textContent = text;
+    overlay.style.display = show ? 'flex' : 'none';
 }
 
 function showEmptyState() {
@@ -342,17 +355,43 @@ function formatNumber(value) {
     return new Intl.NumberFormat('ko-KR').format(value || 0);
 }
 
+function parseDateSafe(value) {
+    if (!value) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+
+    const direct = new Date(raw);
+    if (!Number.isNaN(direct.getTime())) return direct;
+
+    const digits = raw.replace(/[^0-9]/g, '');
+    if (digits.length >= 12) {
+        const y = Number(digits.slice(0, 4));
+        const m = Number(digits.slice(4, 6)) - 1;
+        const d = Number(digits.slice(6, 8));
+        const hh = Number(digits.slice(8, 10));
+        const mm = Number(digits.slice(10, 12));
+        const dt = new Date(y, m, d, hh, mm, 0);
+        if (!Number.isNaN(dt.getTime())) return dt;
+    }
+    if (digits.length >= 8) {
+        const y = Number(digits.slice(0, 4));
+        const m = Number(digits.slice(4, 6)) - 1;
+        const d = Number(digits.slice(6, 8));
+        const dt = new Date(y, m, d);
+        if (!Number.isNaN(dt.getTime())) return dt;
+    }
+    return null;
+}
+
 function formatDisplayDate(value) {
-    if (!value) return '-';
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return '-';
+    const d = parseDateSafe(value);
+    if (!d) return '-';
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function formatDisplayDateTime(value) {
-    if (!value) return '-';
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return '-';
+    const d = parseDateSafe(value);
+    if (!d) return '-';
     return `${formatDisplayDate(value)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 

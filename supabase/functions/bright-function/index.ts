@@ -275,11 +275,29 @@ serve(async (req) => {
     }
 
     const convertDateTime = (dateStr: string, timeStr: string): string | null => {
-      const d = convertDate(dateStr)
+      const rawDate = String(dateStr || '')
+      const rawTime = String(timeStr || '')
+
+      // e.g. 202503241430, 2025-03-24 14:30
+      const mergedDigits = `${rawDate}${rawTime}`.replace(/[^0-9]/g, '')
+      if (mergedDigits.length >= 12) {
+        const y = mergedDigits.substring(0, 4)
+        const m = mergedDigits.substring(4, 6)
+        const d = mergedDigits.substring(6, 8)
+        const hh = mergedDigits.substring(8, 10)
+        const mm = mergedDigits.substring(10, 12)
+        return `${y}-${m}-${d} ${hh}:${mm}:00`
+      }
+
+      const d = convertDate(rawDate)
       if (!d) return null
-      const cleanedTime = (timeStr || '').replace(/[^0-9]/g, '')
-      if (cleanedTime.length < 4) return `${d} 00:00:00`
-      return `${d} ${cleanedTime.substring(0,2)}:${cleanedTime.substring(2,4)}:00`
+
+      const cleanedTime = rawTime.replace(/[^0-9]/g, '')
+      if (cleanedTime.length >= 4) {
+        return `${d} ${cleanedTime.substring(0,2)}:${cleanedTime.substring(2,4)}:00`
+      }
+
+      return `${d} 00:00:00`
     }
 
     const parseAmount = (amountStr: any): number => {
@@ -296,7 +314,10 @@ serve(async (req) => {
         bid_notice_org: item.ntceInsttNm || item.ntceInsttNm || '',
         demand_org: item.dminsttNm || item.dmndInsttNm || '',
         notice_date: convertDate(item.bidNtceDt || item.bidntceDt || item.bidNtceDate || ''),
-        bid_date: convertDateTime(item.bidClseDt || item.bidCloseDt || '', item.bidClseTm || item.bidCloseTm || ''),
+        bid_date: convertDateTime(
+          item.bidClseDt || item.bidCloseDt || item.bidClseDate || item.bidCloseDate || '',
+          item.bidClseTm || item.bidCloseTm || item.bidClseTime || item.bidCloseTime || ''
+        ),
         contract_type: item.cntrctCnclsMthdNm || item.cntrctMthdNm || item.bidMethdNm || 'GENERAL_COMPETITIVE_BID',
         bid_amount: parseAmount(item.asignBdgtAmt || item.presmptPrce),
         bid_status: 'OPEN',

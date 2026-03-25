@@ -1,17 +1,17 @@
 :root {
-    --ink: #101828;
-    --ink-soft: #475467;
-    --line: #d0d5dd;
+    --ink: #0b1f3a;
+    --ink-soft: #4a6285;
+    --line: #c8d4e8;
     --paper: #ffffff;
-    --bg: #f3f5f8;
-    --brand: #0f766e;
-    --brand-dark: #115e59;
-    --accent: #0ea5e9;
-    --ok: #16a34a;
+    --bg: #eef4ff;
+    --brand: #2563eb;
+    --brand-dark: #1d4ed8;
+    --accent: #38bdf8;
+    --ok: #2563eb;
     --warn: #d97706;
     --danger: #dc2626;
     --radius: 14px;
-    --shadow: 0 10px 20px rgba(16, 24, 40, 0.08);
+    --shadow: 0 10px 20px rgba(37, 99, 235, 0.10);
 }
 
 * {
@@ -23,7 +23,7 @@ body {
     font-family: 'SUIT', sans-serif;
     color: var(--ink);
     background:
-        radial-gradient(circle at 10% 0%, #dff7f5 0, transparent 30%),
+        radial-gradient(circle at 10% 0%, #dbeafe 0, transparent 35%),
         radial-gradient(circle at 90% 100%, #e0f2fe 0, transparent 35%),
         var(--bg);
 }
@@ -32,10 +32,6 @@ body {
     position: sticky;
     top: 0;
     z-index: 30;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
     padding: 16px 24px;
     border-bottom: 1px solid var(--line);
     background: rgba(255, 255, 255, 0.95);
@@ -44,7 +40,7 @@ body {
 
 .topbar-left h1 {
     margin: 0;
-    font-size: 22px;
+    font-size: 24px;
     font-weight: 800;
 }
 
@@ -54,26 +50,9 @@ body {
     font-size: 13px;
 }
 
-.topbar-actions {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-}
-
-.topbar-actions select,
-.sidebar input,
-.sidebar select {
-    width: 100%;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 10px 12px;
-    font-size: 14px;
-    background: #fff;
-}
-
 .kpi-row {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
     padding: 16px 24px 0;
 }
@@ -95,16 +74,16 @@ body {
 }
 
 .kpi-card strong {
-    font-size: 21px;
+    font-size: 22px;
     font-weight: 800;
 }
 
 .workspace {
     display: grid;
-    grid-template-columns: 260px 1fr 340px;
+    grid-template-columns: 260px 1fr 320px;
     gap: 14px;
     padding: 14px 24px 24px;
-    min-height: calc(100vh - 180px);
+    min-height: calc(100vh - 165px);
 }
 
 .sidebar,
@@ -135,18 +114,28 @@ body {
     font-weight: 600;
 }
 
+.sidebar input,
+.sidebar select {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    background: #fff;
+}
+
 .quick-dates {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 8px;
-    margin-top: 2px;
+    margin-top: 4px;
 }
 
 .sidebar-actions {
     display: grid;
     grid-template-columns: 1fr;
     gap: 8px;
-    margin-top: 6px;
+    margin-top: 8px;
 }
 
 .table-zone {
@@ -172,7 +161,7 @@ table {
 thead th {
     position: sticky;
     top: 0;
-    background: #f8fafc;
+    background: #f3f8ff;
     z-index: 1;
     text-align: left;
     color: var(--ink-soft);
@@ -183,7 +172,7 @@ thead th {
 }
 
 tbody td {
-    border-bottom: 1px solid #edf1f4;
+    border-bottom: 1px solid #edf1f8;
     padding: 11px;
     vertical-align: top;
 }
@@ -194,11 +183,11 @@ tbody tr {
 }
 
 tbody tr:hover {
-    background: #f2fbfa;
+    background: #ecf4ff;
 }
 
 tbody tr.is-selected {
-    background: #e8fbf8;
+    background: #e2eeff;
 }
 
 .title-cell {
@@ -220,8 +209,8 @@ tbody tr.is-selected {
 }
 
 .status-open {
-    color: var(--ok);
-    background: #eafaf0;
+    color: #1d4ed8;
+    background: #e5edff;
 }
 
 .status-closed {
@@ -259,42 +248,55 @@ tbody tr.is-selected {
 }
 
 .detail-zone {
-    padding: 16px;
+    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
 }
 
-.detail-placeholder {
-    color: var(--ink-soft);
-    font-size: 14px;
+#detail-body {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+}
+
+.detail-grid-two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
 }
 
 .detail-item {
     border: 1px solid var(--line);
     border-radius: 10px;
-    padding: 10px;
-    background: #fafbfd;
+    padding: 8px;
+    background: #f8fbff;
+    font-size: 12px;
+    line-height: 1.35;
 }
 
 .detail-item strong {
     display: block;
     color: var(--ink-soft);
-    font-size: 12px;
-    margin-bottom: 4px;
+    font-size: 11px;
+    margin-bottom: 3px;
+}
+
+#open-detail-btn {
+    margin-top: auto;
 }
 
 .loading,
 .empty-state {
     text-align: center;
-    padding: 32px 16px;
+    padding: 24px 16px;
     color: var(--ink-soft);
 }
 
 .spinner {
     width: 24px;
     height: 24px;
-    border: 3px solid #e5e7eb;
+    border: 3px solid #dbeafe;
     border-top-color: var(--accent);
     border-radius: 50%;
     margin: 0 auto 12px;
@@ -335,8 +337,71 @@ tbody tr.is-selected {
 }
 
 .btn-sm {
-    padding: 8px 8px;
+    padding: 8px 10px;
     font-size: 12px;
+}
+
+.global-loading {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.global-loading-card {
+    width: min(420px, 92vw);
+    background: #fff;
+    border-radius: 18px;
+    padding: 28px 22px;
+    text-align: center;
+    box-shadow: 0 24px 50px rgba(2, 6, 23, 0.3);
+}
+
+.global-loading-card h3 {
+    margin: 12px 0 4px;
+    font-size: 20px;
+}
+
+.global-loading-card p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 14px;
+}
+
+.rings {
+    position: relative;
+    width: 90px;
+    height: 90px;
+    margin: 0 auto 4px;
+}
+
+.rings span {
+    position: absolute;
+    inset: 0;
+    border: 3px solid transparent;
+    border-top-color: var(--brand);
+    border-radius: 50%;
+    animation: orbit 1.4s linear infinite;
+}
+
+.rings span:nth-child(2) {
+    inset: 10px;
+    border-top-color: #3b82f6;
+    animation-duration: 1s;
+    animation-direction: reverse;
+}
+
+.rings span:nth-child(3) {
+    inset: 22px;
+    border-top-color: #60a5fa;
+    animation-duration: 0.8s;
+}
+
+@keyframes orbit {
+    to { transform: rotate(360deg); }
 }
 
 @media (max-width: 1280px) {
@@ -350,21 +415,13 @@ tbody tr.is-selected {
 
 @media (max-width: 900px) {
     .kpi-row {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr;
     }
     .workspace {
         grid-template-columns: 1fr;
         padding: 12px;
     }
     .topbar {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    .topbar-actions {
-        width: 100%;
-    }
-    .topbar-actions select,
-    .topbar-actions button {
-        flex: 1;
+        padding: 14px 12px;
     }
 }
