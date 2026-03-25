@@ -12,8 +12,8 @@ const state = {
     keyword: '',
     startDate: '',
     endDate: '',
-    sortBy: 'notice_date',
-    sortOrder: 'desc',
+    sortBy: 'bid_date',
+    sortOrder: 'asc',
 };
 
 function initTitleRocketIcon() {
@@ -81,7 +81,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function initEventListeners() {
-    document.getElementById('search-btn').addEventListener('click', onSearch);
     document.getElementById('reset-btn').addEventListener('click', onReset);
     document.getElementById('prev-page').addEventListener('click', () => changePage(currentPage - 1));
     document.getElementById('next-page').addEventListener('click', () => changePage(currentPage + 1));
@@ -221,8 +220,8 @@ async function onSearch() {
 async function onReset() {
     document.getElementById('keyword-search').value = '';
     state.keyword = '';
-    state.sortBy = 'notice_date';
-    state.sortOrder = 'desc';
+    state.sortBy = 'bid_date';
+    state.sortOrder = 'asc';
     updateSortHeaderUI();
     setDefaultDates(currentDataWindowDays);
     syncDateFilterState();
@@ -236,7 +235,7 @@ async function onHeaderSort(sortBy) {
         state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
     } else {
         state.sortBy = sortBy;
-        state.sortOrder = 'desc';
+        state.sortOrder = sortBy === 'bid_date' ? 'asc' : 'desc';
     }
 
     updateSortHeaderUI();
@@ -272,13 +271,31 @@ async function loadBids() {
         if (state.startDate) query = query.gte('notice_date', state.startDate);
         if (state.endDate) query = query.lte('notice_date', state.endDate);
 
-        query = query.order(state.sortBy, { ascending: state.sortOrder === 'asc' });
-
         const from = (currentPage - 1) * APP_CONFIG.ITEMS_PER_PAGE;
         const to = from + APP_CONFIG.ITEMS_PER_PAGE - 1;
-        query = query.range(from, to);
+        let data;
+        let count;
+        let error;
 
-        const { data, error, count } = await query;
+        if (state.sortBy === 'bid_date') {
+            const result = await query;
+            data = result.data;
+            count = result.count;
+            error = result.error;
+            if (!error && Array.isArray(data)) {
+                const sorted = sortRowsByBidDateSmart(data, state.sortOrder);
+                data = sorted.slice(from, to + 1);
+                count = sorted.length;
+            }
+        } else {
+            query = query.order(state.sortBy, { ascending: state.sortOrder === 'asc' });
+            query = query.range(from, to);
+            const result = await query;
+            data = result.data;
+            count = result.count;
+            error = result.error;
+        }
+
         if (error) throw error;
         if (requestId !== latestLoadRequestId) return;
 
@@ -538,6 +555,36 @@ function formatDisplayDateTime(value) {
     const d = parseDateSafe(value);
     if (!d) return '-';
     return `${formatDisplayDate(value)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function sortRowsByBidDateSmart(rows, sortOrder = 'asc') {
+    const now = Date.now();
+    const toRank = (value) => {
+        const d = parseDateSafe(value);
+        if (!d) return { bucket: 2, time: Number.POSITIVE_INFINITY };
+        const time = d.getTime();
+        if (time >= now) return { bucket: 0, time };
+        return { bucket: 1, time };
+    };
+
+    const copied = [...rows];
+    copied.sort((a, b) => {
+        const ar = toRank(a.bid_date);
+        const br = toRank(b.bid_date);
+
+        if (ar.bucket !== br.bucket) return ar.bucket - br.bucket;
+        if (ar.bucket === 2) return 0;
+
+        if (sortOrder === 'desc') {
+            if (ar.bucket === 0) return br.time - ar.time;
+            return ar.time - br.time;
+        }
+
+        if (ar.bucket === 0) return ar.time - br.time;
+        return br.time - ar.time;
+    });
+
+    return copied;
 }
 
 function isUrgentDeadline(value) {
