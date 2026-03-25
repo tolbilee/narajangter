@@ -251,16 +251,18 @@ function renderRows(rows) {
         const tr = document.createElement('tr');
         tr.dataset.id = bid.bid_notice_no;
         tr.onclick = () => selectBid(bid, tr);
+        if (isPastDeadline(bid.bid_date)) {
+            tr.classList.add('is-expired');
+        }
 
-        const statusLabel = formatStatusLabel(bid.bid_status);
-        const statusClass = String(bid.bid_status || '').toUpperCase() === 'CLOSED' ? 'status-closed' : 'status-open';
+        const statusBadge = getStatusBadgeMeta(bid);
         tr.innerHTML = `
             <td class="title-cell">${highlightKeyword(bid.bid_notice_name || '-', state.keyword)}</td>
             <td><div>${highlightKeyword(bid.bid_notice_org || '-', state.keyword)}</div><div class="muted">${escapeHtml(bid.demand_org || '-')}</div></td>
             <td>${formatDisplayDate(bid.notice_date)}</td>
             <td>${renderBidDeadlineHtml(bid.bid_date)}</td>
             <td class="amount-cell">${formatCurrency(bid.bid_amount)}</td>
-            <td><span class="status-pill ${statusClass}">${statusLabel}</span></td>
+            <td><span class="status-pill ${statusBadge.className}">${statusBadge.text}</span></td>
         `;
         tbody.appendChild(tr);
     }
@@ -276,7 +278,7 @@ function selectBid(bid, rowEl) {
 function renderDetail(bid) {
     const body = document.getElementById('detail-body');
     const openBtn = document.getElementById('open-detail-btn');
-    const statusText = escapeHtml(formatStatusLabel(bid.bid_status));
+    const statusText = escapeHtml(isPastDeadline(bid.bid_date) ? '마감' : formatStatusLabel(bid.bid_status));
     const bidDeadlineHtml = renderBidDeadlineHtml(bid.bid_date);
 
     body.innerHTML = `
@@ -416,6 +418,20 @@ function formatStatusLabel(status) {
     return status || '-';
 }
 
+function getStatusBadgeMeta(bid) {
+    const normalized = String(bid?.bid_status || '').toUpperCase();
+    if (isPastDeadline(bid?.bid_date) || normalized === 'CLOSED') {
+        return {
+            className: 'status-expired',
+            text: '<i class="fas fa-hourglass-end"></i> 마감'
+        };
+    }
+    return {
+        className: 'status-open',
+        text: '진행중'
+    };
+}
+
 function formatCurrency(amount) {
     if (!amount) return '-';
     return new Intl.NumberFormat('ko-KR', APP_CONFIG.CURRENCY_FORMAT).format(amount);
@@ -473,6 +489,12 @@ function isUrgentDeadline(value) {
     if (diffMs < 0) return false;
     const diffDays = diffMs / (1000 * 60 * 60 * 24);
     return diffDays <= 7;
+}
+
+function isPastDeadline(value) {
+    const d = parseDateSafe(value);
+    if (!d) return false;
+    return d.getTime() < Date.now();
 }
 
 function renderBidDeadlineHtml(value) {

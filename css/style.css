@@ -233,6 +233,18 @@ tbody tr.is-selected {
     background: #fef3c7;
 }
 
+tbody tr.is-expired td {
+    color: #9ca3af;
+}
+
+tbody tr.is-expired .muted {
+    color: #c2c9d3;
+}
+
+tbody tr.is-expired .status-pill {
+    opacity: 0.55;
+}
+
 .title-cell {
     font-weight: 700;
     max-width: 360px;
@@ -266,6 +278,11 @@ tbody tr.is-selected {
 .status-closed {
     color: var(--danger);
     background: #fff1f2;
+}
+
+.status-expired {
+    color: #374151;
+    background: #e5e7eb;
 }
 
 .pagination {
@@ -356,12 +373,19 @@ tbody tr.is-selected {
     vertical-align: middle;
 }
 
-.topbar-left h1 i {
-    background: linear-gradient(135deg, #f97316 0%, #ef4444 35%, #8b5cf6 70%, #06b6d4 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    margin-right: 4px;
+.title-rocket {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin-right: 6px;
+    border-radius: 999px;
+    background: #fff7ed;
+    border: 1px solid #fdba74;
+    box-shadow: 0 2px 6px rgba(249, 115, 22, 0.25);
+    font-size: 17px;
+    transform: translateY(2px);
 }
 
 #open-detail-btn {
