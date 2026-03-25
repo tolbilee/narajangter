@@ -81,6 +81,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function initEventListeners() {
+    const legacySearchBtn = document.getElementById('search-btn');
+    if (legacySearchBtn) {
+        legacySearchBtn.remove();
+    }
+
     document.getElementById('reset-btn').addEventListener('click', onReset);
     document.getElementById('prev-page').addEventListener('click', () => changePage(currentPage - 1));
     document.getElementById('next-page').addEventListener('click', () => changePage(currentPage + 1));
