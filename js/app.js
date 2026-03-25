@@ -90,11 +90,19 @@ function initEventListeners() {
             await onHeaderSort(th.dataset.sort);
         });
     });
-    document.getElementById('keyword-search').addEventListener('keypress', (e) => {
+    const keywordInput = document.getElementById('keyword-search');
+    keywordInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') onSearch();
     });
-    document.getElementById('keyword-search').addEventListener('input', async (e) => {
+    keywordInput.addEventListener('input', async (e) => {
         state.keyword = e.target.value.trim();
+        currentPage = 1;
+        await loadBids();
+    });
+    keywordInput.addEventListener('click', async () => {
+        if (!keywordInput.value.trim()) return;
+        keywordInput.value = '';
+        state.keyword = '';
         currentPage = 1;
         await loadBids();
     });
