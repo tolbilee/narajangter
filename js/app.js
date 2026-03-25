@@ -138,11 +138,19 @@ async function handleRefreshData() {
             }
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        let result;
+        const rawText = await response.text();
+        try {
+            result = rawText ? JSON.parse(rawText) : {};
+        } catch (_parseError) {
+            result = { success: false, error: rawText || 'Non-JSON response from function' };
         }
 
-        const result = await response.json();
+        if (!response.ok) {
+            const serverMessage = result?.error || result?.message || response.statusText || 'Function request failed';
+            throw new Error(`HTTP ${response.status}: ${serverMessage}`);
+        }
+
         if (!result.success) {
             throw new Error(result.error || 'Unknown error');
         }
