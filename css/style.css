@@ -377,21 +377,17 @@ tbody tr.is-expired .status-pill {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 44px;
+    height: 44px;
     margin-right: 6px;
-    border-radius: 999px;
-    background: #fff7ed;
-    border: 1px solid #fdba74;
-    box-shadow: 0 2px 6px rgba(249, 115, 22, 0.25);
-    font-size: 17px;
-    transform: translateY(2px);
+    font-size: 24px;
+    transform: translateY(4px);
     overflow: hidden;
 }
 
 .title-rocket > svg {
-    width: 24px !important;
-    height: 24px !important;
+    width: 42px !important;
+    height: 42px !important;
 }
 
 #open-detail-btn {
