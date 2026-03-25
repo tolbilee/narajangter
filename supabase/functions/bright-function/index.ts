@@ -113,6 +113,21 @@ function chunkArray<T>(items: T[], size: number): T[][] {
   return chunks
 }
 
+function createDayWindow(today: Date, dayOffset: number): { dayBgn: string, dayEnd: string } {
+  const targetDate = new Date(today.getTime() - (dayOffset * 24 * 60 * 60 * 1000))
+  return {
+    dayBgn: formatDateTimeCompact(targetDate, false),
+    dayEnd: formatDateTimeCompact(targetDate, true),
+  }
+}
+
+function formatDateOnly(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 async function callG2BWithFallbacks(
   apiKey: string,
   inqryBgnDt: string,
@@ -193,45 +208,67 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
     let requestedDays = 7
-    let resetAll = true
+    let resetAll = false
     if (req.method === 'POST') {
       try {
         const body = await req.json()
         if (body?.days === 30 || body?.days === '30') requestedDays = 30
-        if (body?.resetAll === false) resetAll = false
+        if (body?.resetAll === true) resetAll = true
       } catch {
         requestedDays = 7
-        resetAll = true
+        resetAll = false
       }
     }
 
     const today = new Date()
     const daysToFetch = requestedDays
+    const startDate = new Date(today.getTime() - ((daysToFetch - 1) * 24 * 60 * 60 * 1000))
+    const rangeStartDate = formatDateOnly(startDate)
+    const rangeEndDate = formatDateOnly(today)
     const allItems: any[] = []
     const debugAttempts: G2BAttemptResult[] = []
     let lastSuccessEndpoint = ''
     let lastSuccessEncoded = true
 
-    for (let i = 0; i < daysToFetch; i++) {
-      const targetDate = new Date(today.getTime() - (i * 24 * 60 * 60 * 1000))
-      const dayBgn = formatDateTimeCompact(targetDate, false)
-      const dayEnd = formatDateTimeCompact(targetDate, true)
+    const dayOffsets = Array.from({ length: daysToFetch }, (_, i) => i)
+    const maxParallel = 3
+    for (let start = 0; start < dayOffsets.length; start += maxParallel) {
+      const offsetBatch = dayOffsets.slice(start, start + maxParallel)
+      const batchResults = await Promise.all(offsetBatch.map(async (offset) => {
+        const { dayBgn, dayEnd } = createDayWindow(today, offset)
+        try {
+          const g2b = await callG2BWithFallbacks(G2B_API_KEY, dayBgn, dayEnd)
+          const dayItems = normalizeItems(g2b.data?.response?.body?.items)
+          return {
+            ok: true as const,
+            offset,
+            dayItems,
+            attempts: g2b.attempts.slice(-3),
+            endpoint: g2b.endpoint,
+            encodedKey: g2b.encodedKey,
+          }
+        } catch (dayError: any) {
+          return {
+            ok: false as const,
+            offset,
+            attempts: [{
+              endpoint: `daily-window-${offset}`,
+              encodedKey: true,
+              keyParamName: 'serviceKey',
+              httpStatus: 0,
+              resultMsg: String(dayError?.message || 'Daily fetch failed').slice(0, 240),
+            } as G2BAttemptResult],
+          }
+        }
+      }))
 
-      try {
-        const g2b = await callG2BWithFallbacks(G2B_API_KEY, dayBgn, dayEnd)
-        const dayItems = normalizeItems(g2b.data?.response?.body?.items)
-        allItems.push(...dayItems)
-        debugAttempts.push(...g2b.attempts.slice(-3))
-        lastSuccessEndpoint = g2b.endpoint
-        lastSuccessEncoded = g2b.encodedKey
-      } catch (dayError: any) {
-        debugAttempts.push({
-          endpoint: `daily-window-${i}`,
-          encodedKey: true,
-          keyParamName: 'serviceKey',
-          httpStatus: 0,
-          resultMsg: String(dayError?.message || 'Daily fetch failed').slice(0, 240),
-        })
+      for (const result of batchResults) {
+        debugAttempts.push(...result.attempts)
+        if (result.ok) {
+          allItems.push(...result.dayItems)
+          lastSuccessEndpoint = result.endpoint
+          lastSuccessEncoded = result.encodedKey
+        }
       }
     }
 
@@ -244,6 +281,17 @@ serve(async (req) => {
         .neq('bid_notice_no', '')
       if (deleteError) {
         throw new Error(`기존 데이터 삭제 실패: ${deleteError.message}`)
+      }
+    }
+
+    if (!resetAll) {
+      const { error: deleteRangeError } = await supabase
+        .from('bids')
+        .delete()
+        .gte('notice_date', rangeStartDate)
+        .lte('notice_date', rangeEndDate)
+      if (deleteRangeError) {
+        throw new Error(`Failed to clear date window: ${deleteRangeError.message}`)
       }
     }
 
@@ -345,8 +393,6 @@ serve(async (req) => {
         insertedCount += batch.length
       }
     }
-
-    const startDate = new Date(today.getTime() - ((daysToFetch - 1) * 24 * 60 * 60 * 1000))
 
     return new Response(
       JSON.stringify({

@@ -21,7 +21,6 @@ function initSupabase() {
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         return true;
     } catch (error) {
-        if (requestId !== latestLoadRequestId) return;
         console.error('Supabase 초기화 실패:', error);
         alert('Supabase 연결에 실패했습니다.');
         return false;
@@ -34,7 +33,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     initEventListeners();
     setDefaultDates(7);
     syncDateFilterState();
-    await runRefresh(7, {
+    await refreshDashboard();
+    runRefresh(7, {
         silent: true,
         loadingMessage: '최초 접속 데이터를 불러오는 중입니다...',
     });
@@ -87,7 +87,9 @@ async function runRefresh(days, options = {}) {
     const { silent = false, loadingMessage = '데이터를 동기화 중입니다...' } = options;
     loadingStartAt = Date.now();
     loadingExpectedMs = getExpectedDurationMs(days);
-    showGlobalLoading(true, loadingMessage, loadingExpectedMs);
+    if (!silent) {
+        showGlobalLoading(true, loadingMessage, loadingExpectedMs);
+    }
 
     try {
         const response = await fetch(FETCH_BIDS_FUNCTION_URL, {
@@ -98,7 +100,7 @@ async function runRefresh(days, options = {}) {
             },
             body: JSON.stringify({
                 days,
-                resetAll: true,
+                resetAll: false,
             }),
         });
 
@@ -119,7 +121,9 @@ async function runRefresh(days, options = {}) {
         console.error('갱신 실패:', error);
         alert(`데이터 갱신 실패\n${error.message}`);
     } finally {
-        showGlobalLoading(false);
+        if (!silent) {
+            showGlobalLoading(false);
+        }
     }
 }
 
@@ -254,8 +258,8 @@ function renderRows(rows) {
             <td class="title-cell">${highlightKeyword(bid.bid_notice_name || '-', state.keyword)}</td>
             <td><div>${highlightKeyword(bid.bid_notice_org || '-', state.keyword)}</div><div class="muted">${escapeHtml(bid.demand_org || '-')}</div></td>
             <td>${formatDisplayDate(bid.notice_date)}</td>
-            <td>${formatDisplayDateTime(bid.bid_date)}</td>
-            <td>${formatCurrency(bid.bid_amount)}</td>
+            <td>${renderBidDeadlineHtml(bid.bid_date)}</td>
+            <td class="amount-cell">${formatCurrency(bid.bid_amount)}</td>
             <td><span class="status-pill ${statusClass}">${statusLabel}</span></td>
         `;
         tbody.appendChild(tr);
@@ -273,6 +277,7 @@ function renderDetail(bid) {
     const body = document.getElementById('detail-body');
     const openBtn = document.getElementById('open-detail-btn');
     const statusText = escapeHtml(formatStatusLabel(bid.bid_status));
+    const bidDeadlineHtml = renderBidDeadlineHtml(bid.bid_date);
 
     body.innerHTML = `
         <div class="detail-item"><strong>공고명</strong>${escapeHtml(bid.bid_notice_name || '-')}</div>
@@ -283,13 +288,13 @@ function renderDetail(bid) {
         </div>
         <div class="detail-grid-two">
             <div class="detail-item"><strong>공고일</strong>${formatDisplayDate(bid.notice_date)}</div>
-            <div class="detail-item"><strong>입찰 마감</strong>${formatDisplayDateTime(bid.bid_date)}</div>
+            <div class="detail-item"><strong>입찰 마감</strong>${bidDeadlineHtml}</div>
         </div>
         <div class="detail-grid-two">
             <div class="detail-item"><strong>계약방식</strong>${escapeHtml(bid.contract_type || '-')}</div>
             <div class="detail-item"><strong>상태</strong>${statusText}</div>
         </div>
-        <div class="detail-item"><strong>추정금액</strong>${formatCurrency(bid.bid_amount)}</div>
+        <div class="detail-item detail-amount"><strong>추정금액</strong>${formatCurrency(bid.bid_amount)}</div>
         <div class="detail-item"><strong>설명</strong>${escapeHtml(bid.description || '-')}</div>
     `;
     openBtn.style.display = bid.detail_url ? 'inline-flex' : 'none';
@@ -333,7 +338,10 @@ async function changePage(page) {
 
 async function updateStatistics() {
     try {
-        const { count: totalBids } = await supabaseClient.from('bids').select('*', { count: 'exact', head: true });
+        let query = supabaseClient.from('bids').select('*', { count: 'exact', head: true });
+        if (state.startDate) query = query.gte('notice_date', state.startDate);
+        if (state.endDate) query = query.lte('notice_date', state.endDate);
+        const { count: totalBids } = await query;
         document.getElementById('total-bids').textContent = `${formatNumber(totalBids || 0)}건`;
         document.getElementById('total-bids-label').textContent = `최근 ${currentDataWindowDays}일간 전체 공고`;
         updateResultsCount(totalCount);
@@ -455,6 +463,22 @@ function formatDisplayDateTime(value) {
     const d = parseDateSafe(value);
     if (!d) return '-';
     return `${formatDisplayDate(value)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function isUrgentDeadline(value) {
+    const d = parseDateSafe(value);
+    if (!d) return false;
+    const now = new Date();
+    const diffMs = d.getTime() - now.getTime();
+    if (diffMs < 0) return false;
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    return diffDays <= 7;
+}
+
+function renderBidDeadlineHtml(value) {
+    const text = escapeHtml(formatDisplayDateTime(value));
+    if (!isUrgentDeadline(value)) return text;
+    return `${text}<span class="urgent-badge" title="마감 임박">긴급</span>`;
 }
 
 function escapeHtml(input) {
