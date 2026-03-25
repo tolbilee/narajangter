@@ -171,6 +171,28 @@ thead th {
     white-space: nowrap;
 }
 
+thead th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+thead th.sortable::after {
+    content: '↕';
+    margin-left: 6px;
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+thead th.sortable.sorted-asc::after {
+    content: '↑';
+    color: var(--brand);
+}
+
+thead th.sortable.sorted-desc::after {
+    content: '↓';
+    color: var(--brand);
+}
+
 tbody td {
     border-bottom: 1px solid #edf1f8;
     padding: 11px;
@@ -198,6 +220,13 @@ tbody tr.is-selected {
 .muted {
     color: var(--ink-soft);
     font-size: 12px;
+}
+
+.hl {
+    background: #fde68a;
+    color: #111827;
+    border-radius: 4px;
+    padding: 0 2px;
 }
 
 .status-pill {
@@ -271,19 +300,23 @@ tbody tr.is-selected {
     border-radius: 10px;
     padding: 8px;
     background: #f8fbff;
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.35;
 }
 
 .detail-item strong {
     display: block;
     color: var(--ink-soft);
-    font-size: 11px;
+    font-size: 13px;
     margin-bottom: 3px;
 }
 
 #open-detail-btn {
-    margin-top: auto;
+    margin-top: 6px;
+    width: 100%;
+    min-height: 52px;
+    font-size: 15px;
+    justify-content: center;
 }
 
 .loading,
@@ -369,6 +402,12 @@ tbody tr.is-selected {
     margin: 0;
     color: var(--ink-soft);
     font-size: 14px;
+}
+
+#global-loading-eta {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #6b7ea5;
 }
 
 .rings {

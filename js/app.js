@@ -3,6 +3,9 @@ let currentPage = 1;
 let totalCount = 0;
 let selectedBid = null;
 let currentDataWindowDays = 7;
+let loadingTicker = null;
+let loadingStartAt = 0;
+let loadingExpectedMs = 0;
 
 const state = {
     keyword: '',
@@ -38,9 +41,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 function initEventListeners() {
     document.getElementById('search-btn').addEventListener('click', onSearch);
     document.getElementById('reset-btn').addEventListener('click', onReset);
-    document.getElementById('sort-select').addEventListener('change', onSortChange);
     document.getElementById('prev-page').addEventListener('click', () => changePage(currentPage - 1));
     document.getElementById('next-page').addEventListener('click', () => changePage(currentPage + 1));
+    document.querySelectorAll('th.sortable[data-sort]').forEach((th) => {
+        th.addEventListener('click', async () => {
+            await onHeaderSort(th.dataset.sort);
+        });
+    });
     document.getElementById('keyword-search').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') onSearch();
     });
@@ -70,11 +77,15 @@ function initEventListeners() {
             });
         });
     });
+
+    updateSortHeaderUI();
 }
 
 async function runRefresh(days, options = {}) {
     const { silent = false, loadingMessage = '데이터를 동기화 중입니다...' } = options;
-    showGlobalLoading(true, loadingMessage);
+    loadingStartAt = Date.now();
+    loadingExpectedMs = getExpectedDurationMs(days);
+    showGlobalLoading(true, loadingMessage, loadingExpectedMs);
 
     try {
         const response = await fetch(FETCH_BIDS_FUNCTION_URL, {
@@ -99,10 +110,9 @@ async function runRefresh(days, options = {}) {
         setDefaultDates(days);
         syncDateFilterState();
         await refreshDashboard();
+        saveActualDuration(days, Date.now() - loadingStartAt);
 
-        if (!silent) {
-            alert(`갱신 완료\n${result.message}\n저장: ${result.insertedCount || 0}/${result.totalItems || 0}`);
-        }
+        // 성공 팝업은 UX 간소화를 위해 표시하지 않는다.
     } catch (error) {
         console.error('갱신 실패:', error);
         alert(`데이터 갱신 실패\n${error.message}`);
@@ -145,22 +155,37 @@ async function onSearch() {
 
 async function onReset() {
     document.getElementById('keyword-search').value = '';
-    document.getElementById('sort-select').value = 'notice_desc';
     state.keyword = '';
     state.sortBy = 'notice_date';
     state.sortOrder = 'desc';
+    updateSortHeaderUI();
     setDefaultDates(currentDataWindowDays);
     syncDateFilterState();
     currentPage = 1;
     await loadBids();
 }
 
-async function onSortChange(e) {
-    const [sortBy, sortOrder] = String(e.target.value || 'notice_desc').split('_');
-    state.sortBy = sortBy === 'notice' ? 'notice_date' : sortBy === 'bid' ? 'bid_date' : sortBy === 'amount' ? 'bid_amount' : 'notice_date';
-    state.sortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
+async function onHeaderSort(sortBy) {
+    if (!sortBy) return;
+    if (state.sortBy === sortBy) {
+        state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        state.sortBy = sortBy;
+        state.sortOrder = 'desc';
+    }
+
+    updateSortHeaderUI();
     currentPage = 1;
     await loadBids();
+}
+
+function updateSortHeaderUI() {
+    document.querySelectorAll('th.sortable[data-sort]').forEach((th) => {
+        th.classList.remove('sorted-asc', 'sorted-desc');
+        if (th.dataset.sort === state.sortBy) {
+            th.classList.add(state.sortOrder === 'asc' ? 'sorted-asc' : 'sorted-desc');
+        }
+    });
 }
 
 async function loadBids() {
@@ -216,8 +241,8 @@ function renderRows(rows) {
         const statusLabel = formatStatusLabel(bid.bid_status);
         const statusClass = String(bid.bid_status || '').toUpperCase() === 'CLOSED' ? 'status-closed' : 'status-open';
         tr.innerHTML = `
-            <td class="title-cell">${escapeHtml(bid.bid_notice_name || '-')}</td>
-            <td><div>${escapeHtml(bid.bid_notice_org || '-')}</div><div class="muted">${escapeHtml(bid.demand_org || '-')}</div></td>
+            <td class="title-cell">${highlightKeyword(bid.bid_notice_name || '-', state.keyword)}</td>
+            <td><div>${highlightKeyword(bid.bid_notice_org || '-', state.keyword)}</div><div class="muted">${escapeHtml(bid.demand_org || '-')}</div></td>
             <td>${formatDisplayDate(bid.notice_date)}</td>
             <td>${formatDisplayDateTime(bid.bid_date)}</td>
             <td>${formatCurrency(bid.bid_amount)}</td>
@@ -323,12 +348,39 @@ function showLoading(show) {
     document.getElementById('loading').style.display = show ? 'block' : 'none';
 }
 
-function showGlobalLoading(show, text = '데이터를 동기화 중입니다...') {
+function showGlobalLoading(show, text = '데이터를 동기화 중입니다...', expectedMs = 0) {
     const overlay = document.getElementById('global-loading');
     const label = document.getElementById('global-loading-text');
+    const eta = document.getElementById('global-loading-eta');
     if (!overlay || !label) return;
     label.textContent = text;
     overlay.style.display = show ? 'flex' : 'none';
+
+    if (!show) {
+        if (loadingTicker) {
+            clearInterval(loadingTicker);
+            loadingTicker = null;
+        }
+        return;
+    }
+
+    const expected = Math.max(1000, expectedMs || 1000);
+    const renderEta = () => {
+        if (!eta) return;
+        const elapsed = Date.now() - loadingStartAt;
+        const remainMs = Math.max(expected - elapsed, 0);
+        const elapsedSec = Math.floor(elapsed / 1000);
+        const remainSec = Math.ceil(remainMs / 1000);
+        if (remainMs > 0) {
+            eta.textContent = `예상 남은 시간 약 ${remainSec}초 (경과 ${elapsedSec}초)`;
+        } else {
+            eta.textContent = `예상 시간 이후에도 동기화 중... (경과 ${elapsedSec}초)`;
+        }
+    };
+
+    renderEta();
+    if (loadingTicker) clearInterval(loadingTicker);
+    loadingTicker = setInterval(renderEta, 1000);
 }
 
 function showEmptyState() {
@@ -399,4 +451,44 @@ function escapeHtml(input) {
     if (input == null) return '';
     const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#039;' };
     return String(input).replace(/[&<>"']/g, (m) => map[m]);
+}
+
+function highlightKeyword(text, keyword) {
+    const raw = String(text ?? '');
+    const q = String(keyword ?? '').trim();
+    if (!q) return escapeHtml(raw);
+
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escaped, 'gi');
+
+    let result = '';
+    let cursor = 0;
+    let matched = false;
+
+    raw.replace(regex, (match, offset) => {
+        matched = true;
+        result += escapeHtml(raw.slice(cursor, offset));
+        result += `<mark class="hl">${escapeHtml(match)}</mark>`;
+        cursor = offset + match.length;
+        return match;
+    });
+
+    if (!matched) return escapeHtml(raw);
+    result += escapeHtml(raw.slice(cursor));
+    return result;
+}
+
+function getExpectedDurationMs(days) {
+    const key = `sync_duration_ms_${days}`;
+    const saved = Number(localStorage.getItem(key) || 0);
+    if (saved > 0) return saved;
+    return days === 30 ? 45000 : 15000;
+}
+
+function saveActualDuration(days, actualMs) {
+    if (!actualMs || actualMs < 500) return;
+    const key = `sync_duration_ms_${days}`;
+    const prev = Number(localStorage.getItem(key) || 0);
+    const next = prev > 0 ? Math.round(prev * 0.7 + actualMs * 0.3) : Math.round(actualMs);
+    localStorage.setItem(key, String(next));
 }

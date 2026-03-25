@@ -47,16 +47,6 @@
                 <button class="btn btn-secondary btn-sm" data-days="30">최근 30일 불러오기</button>
             </div>
 
-            <label for="sort-select">정렬</label>
-            <select id="sort-select">
-                <option value="notice_desc">공고일 (최신순)</option>
-                <option value="notice_asc">공고일 (오래된순)</option>
-                <option value="bid_desc">마감일 (최신순)</option>
-                <option value="bid_asc">마감일 (오래된순)</option>
-                <option value="amount_desc">금액 (높은순)</option>
-                <option value="amount_asc">금액 (낮은순)</option>
-            </select>
-
             <div class="sidebar-actions">
                 <button id="search-btn" class="btn btn-primary">검색</button>
                 <button id="reset-btn" class="btn btn-outline">초기화</button>
@@ -80,9 +70,9 @@
                         <tr>
                             <th>공고명</th>
                             <th>공고기관</th>
-                            <th>공고일</th>
-                            <th>입찰 마감</th>
-                            <th>추정금액</th>
+                            <th class="sortable" data-sort="notice_date">공고일</th>
+                            <th class="sortable" data-sort="bid_date">입찰 마감</th>
+                            <th class="sortable" data-sort="bid_amount">추정금액</th>
                             <th>상태</th>
                         </tr>
                     </thead>
@@ -113,6 +103,7 @@
             </div>
             <h3>데이터 동기화 중</h3>
             <p id="global-loading-text">최근 데이터를 정리하고 있습니다...</p>
+            <p id="global-loading-eta">예상 남은 시간 계산 중...</p>
         </div>
     </div>
 
