@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Browse and filter public bid notices from the Korea ON-line E-Procurement System.">
-    <meta name="keywords" content="KONEPS, bid, tender, notice, public procurement">
-    <title>KONEPS Bid Dashboard</title>
+    <meta name="description" content="나라장터 공고를 조회하고 필터링하는 대시보드입니다.">
+    <meta name="keywords" content="나라장터, 입찰, 공고, 조달">
+    <title>나라장터 입찰 대시보드</title>
 
     <link rel="stylesheet" href="css/style.css">
 
@@ -21,15 +21,19 @@
             <div class="header-content">
                 <h1 class="logo">
                     <i class="fas fa-gavel"></i>
-                    KONEPS Bid Dashboard
+                    나라장터 입찰 대시보드
                 </h1>
                 <div class="header-info">
+                    <select id="refresh-days-select" class="sort-select" aria-label="갱신 기간 선택">
+                        <option value="7">최근 7일 갱신</option>
+                        <option value="30">최근 30일 갱신</option>
+                    </select>
                     <button id="refresh-data-btn" class="btn btn-refresh">
-                        <i class="fas fa-sync-alt"></i> Refresh Data
+                        <i class="fas fa-sync-alt"></i> 데이터 갱신
                     </button>
                     <span id="last-update" class="last-update">
                         <i class="fas fa-sync-alt"></i>
-                        Last update: loading...
+                        마지막 갱신: 불러오는 중...
                     </span>
                 </div>
             </div>
@@ -42,19 +46,19 @@
                 <div class="search-card">
                     <h2 class="section-title">
                         <i class="fas fa-search"></i>
-                        Search Bids
+                        공고 검색
                     </h2>
 
                     <div class="search-group">
                         <label for="keyword-search" class="search-label">
                             <i class="fas fa-keyboard"></i>
-                            Keyword
+                            키워드
                         </label>
                         <div class="input-group">
-                            <input type="text" id="keyword-search" class="search-input" placeholder="Title, notice agency, demand agency...">
+                            <input type="text" id="keyword-search" class="search-input" placeholder="공고명, 공고기관, 수요기관">
                             <button id="search-btn" class="btn btn-primary">
                                 <i class="fas fa-search"></i>
-                                Search
+                                검색
                             </button>
                         </div>
                     </div>
@@ -63,7 +67,7 @@
                         <div class="date-filter">
                             <label for="start-date" class="filter-label">
                                 <i class="fas fa-calendar-alt"></i>
-                                Notice Date Range
+                                공고일 범위
                             </label>
                             <div class="date-inputs">
                                 <input type="date" id="start-date" class="date-input">
@@ -73,20 +77,19 @@
                         </div>
 
                         <div class="quick-dates">
-                            <button class="btn btn-secondary btn-sm" data-days="7">Last 7 Days</button>
-                            <button class="btn btn-secondary btn-sm" data-days="30">Last 30 Days</button>
-                            <button class="btn btn-secondary btn-sm" data-days="90">Last 90 Days</button>
+                            <button class="btn btn-secondary btn-sm" data-days="7">최근 7일</button>
+                            <button class="btn btn-secondary btn-sm" data-days="30">최근 30일</button>
                         </div>
                     </div>
 
                     <div class="filter-actions">
                         <button id="reset-btn" class="btn btn-outline">
                             <i class="fas fa-redo"></i>
-                            Reset
+                            초기화
                         </button>
                         <button id="apply-filter-btn" class="btn btn-primary">
                             <i class="fas fa-filter"></i>
-                            Apply Filters
+                            필터 적용
                         </button>
                     </div>
                 </div>
@@ -99,7 +102,7 @@
                             <i class="fas fa-file-alt"></i>
                         </div>
                         <div class="stat-info">
-                            <div class="stat-label">Total Notices</div>
+                            <div class="stat-label">전체 공고</div>
                             <div class="stat-value" id="total-bids">-</div>
                         </div>
                     </div>
@@ -108,7 +111,7 @@
                             <i class="fas fa-clock"></i>
                         </div>
                         <div class="stat-info">
-                            <div class="stat-label">Open</div>
+                            <div class="stat-label">진행중</div>
                             <div class="stat-value" id="active-bids">-</div>
                         </div>
                     </div>
@@ -117,7 +120,7 @@
                             <i class="fas fa-calendar-day"></i>
                         </div>
                         <div class="stat-info">
-                            <div class="stat-label">Added Today</div>
+                            <div class="stat-label">오늘 추가</div>
                             <div class="stat-value" id="today-bids">-</div>
                         </div>
                     </div>
@@ -128,30 +131,30 @@
                 <div class="results-header">
                     <h2 class="section-title">
                         <i class="fas fa-list"></i>
-                        Bid Notices
+                        입찰 공고
                     </h2>
                     <div class="results-info">
-                        <span id="results-count" class="results-count">Results: 0</span>
+                        <span id="results-count" class="results-count">검색결과: 0</span>
                         <select id="sort-select" class="sort-select">
-                            <option value="notice_desc">Notice Date (Newest)</option>
-                            <option value="notice_asc">Notice Date (Oldest)</option>
-                            <option value="bid_desc">Bid Date (Newest)</option>
-                            <option value="bid_asc">Bid Date (Oldest)</option>
-                            <option value="amount_desc">Amount (High to Low)</option>
-                            <option value="amount_asc">Amount (Low to High)</option>
+                            <option value="notice_desc">공고일 (최신순)</option>
+                            <option value="notice_asc">공고일 (오래된순)</option>
+                            <option value="bid_desc">마감일 (최신순)</option>
+                            <option value="bid_asc">마감일 (오래된순)</option>
+                            <option value="amount_desc">금액 (높은순)</option>
+                            <option value="amount_asc">금액 (낮은순)</option>
                         </select>
                     </div>
                 </div>
 
                 <div id="loading" class="loading" style="display: none;">
                     <div class="spinner"></div>
-                    <p>Loading data...</p>
+                    <p>데이터를 불러오는 중입니다...</p>
                 </div>
 
                 <div id="empty-state" class="empty-state" style="display: none;">
                     <i class="fas fa-inbox"></i>
-                    <h3>No results found</h3>
-                    <p>Try a different keyword or date range.</p>
+                    <h3>검색 결과가 없습니다</h3>
+                    <p>다른 키워드 또는 날짜 범위로 시도해보세요.</p>
                 </div>
 
                 <div id="bids-list" class="bids-list"></div>
@@ -159,11 +162,11 @@
                 <div id="pagination" class="pagination" style="display: none;">
                     <button id="prev-page" class="btn btn-pagination" disabled>
                         <i class="fas fa-chevron-left"></i>
-                        Previous
+                        이전
                     </button>
                     <div id="page-numbers" class="page-numbers"></div>
                     <button id="next-page" class="btn btn-pagination">
-                        Next
+                        다음
                         <i class="fas fa-chevron-right"></i>
                     </button>
                 </div>
@@ -174,11 +177,11 @@
     <footer class="footer">
         <div class="container">
             <div class="footer-content">
-                <p>&copy; 2026 KONEPS Bid Dashboard. All rights reserved.</p>
+                <p>&copy; 2026 나라장터 입찰 대시보드</p>
                 <p class="footer-links">
                     <a href="https://www.g2b.go.kr" target="_blank" rel="noopener">
                         <i class="fas fa-external-link-alt"></i>
-                        Open KONEPS
+                        나라장터 열기
                     </a>
                 </p>
             </div>
@@ -188,7 +191,7 @@
     <div id="bid-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="modal-title" class="modal-title">Bid Notice Details</h2>
+                <h2 id="modal-title" class="modal-title">공고 상세</h2>
                 <button class="modal-close" onclick="closeBidModal()">
                     <i class="fas fa-times"></i>
                 </button>
@@ -197,9 +200,9 @@
             <div class="modal-footer">
                 <button class="btn btn-primary" onclick="openBidDetail()">
                     <i class="fas fa-external-link-alt"></i>
-                    View in KONEPS
+                    나라장터에서 보기
                 </button>
-                <button class="btn btn-outline" onclick="closeBidModal()">Close</button>
+                <button class="btn btn-outline" onclick="closeBidModal()">닫기</button>
             </div>
         </div>
     </div>

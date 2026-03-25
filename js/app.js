@@ -15,11 +15,11 @@ let currentBidDetail = null;
 function initSupabase() {
     try {
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        console.log('Supabase client initialized');
+        console.log('Supabase 클라이언트 초기화 완료');
         return true;
     } catch (error) {
-        console.error('Supabase init failed:', error);
-        showError('Supabase connection failed. Please check config.');
+        console.error('Supabase 초기화 실패:', error);
+        showError('Supabase 연결에 실패했습니다. 설정을 확인해 주세요.');
         return false;
     }
 }
@@ -135,7 +135,10 @@ async function handleRefreshData() {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-            }
+            },
+            body: JSON.stringify({
+                days: Number(document.getElementById('refresh-days-select')?.value || 7)
+            })
         });
 
         let result;
@@ -143,25 +146,25 @@ async function handleRefreshData() {
         try {
             result = rawText ? JSON.parse(rawText) : {};
         } catch (_parseError) {
-            result = { success: false, error: rawText || 'Non-JSON response from function' };
+            result = { success: false, error: rawText || '함수에서 JSON이 아닌 응답을 반환했습니다.' };
         }
 
         if (!response.ok) {
-            const serverMessage = result?.error || result?.message || response.statusText || 'Function request failed';
+            const serverMessage = result?.error || result?.message || response.statusText || '함수 요청에 실패했습니다.';
             throw new Error(`HTTP ${response.status}: ${serverMessage}`);
         }
 
         if (!result.success) {
-            throw new Error(result.error || 'Unknown error');
+            throw new Error(result.error || '알 수 없는 오류');
         }
 
-        alert(`Update done\n${result.message}\nSaved: ${result.insertedCount || 0}/${result.totalItems || 0}`);
+        alert(`갱신 완료\n${result.message}\n저장: ${result.insertedCount || 0}/${result.totalItems || 0}`);
         await loadBids();
         await updateStatistics();
         updateLastUpdateTime();
     } catch (error) {
         console.error('Refresh failed:', error);
-        alert(`Data update failed.\n${error.message}`);
+        alert(`데이터 갱신 실패\n${error.message}`);
     } finally {
         btn.disabled = false;
         icon.classList.remove('fa-spin');
@@ -208,8 +211,8 @@ async function loadBids() {
             updateResultsCount(0);
         }
     } catch (error) {
-        console.error('Load failed:', error);
-        showError('Failed to load data.');
+        console.error('불러오기 실패:', error);
+        showError('데이터를 불러오지 못했습니다.');
     } finally {
         showLoading(false);
     }
@@ -235,32 +238,32 @@ function createBidCard(bid) {
     card.innerHTML = `
         <div class="bid-header">
             <h3 class="bid-title">${escapeHtml(bid.bid_notice_name)}</h3>
-            <span class="bid-status ${statusClass}">${escapeHtml(bid.bid_status || 'OPEN')}</span>
+            <span class="bid-status ${statusClass}">${escapeHtml(formatStatusLabel(bid.bid_status))}</span>
         </div>
         <div class="bid-meta">
             <div class="bid-meta-item">
                 <i class="fas fa-building"></i>
-                <span><strong>Notice Agency:</strong> ${escapeHtml(bid.bid_notice_org || '-')}</span>
+                <span><strong>공고기관:</strong> ${escapeHtml(bid.bid_notice_org || '-')}</span>
             </div>
             <div class="bid-meta-item">
                 <i class="fas fa-users"></i>
-                <span><strong>Demand Agency:</strong> ${escapeHtml(bid.demand_org || '-')}</span>
+                <span><strong>수요기관:</strong> ${escapeHtml(bid.demand_org || '-')}</span>
             </div>
             <div class="bid-meta-item">
                 <i class="fas fa-calendar"></i>
-                <span><strong>Notice Date:</strong> ${formattedNoticeDate}</span>
+                <span><strong>공고일:</strong> ${formattedNoticeDate}</span>
             </div>
             <div class="bid-meta-item">
                 <i class="fas fa-clock"></i>
-                <span><strong>Bid Deadline:</strong> ${formattedBidDate}</span>
+                <span><strong>입찰마감:</strong> ${formattedBidDate}</span>
             </div>
             <div class="bid-meta-item">
                 <i class="fas fa-file-contract"></i>
-                <span><strong>Contract Type:</strong> ${escapeHtml(bid.contract_type || '-')}</span>
+                <span><strong>계약방식:</strong> ${escapeHtml(bid.contract_type || '-')}</span>
             </div>
             <div class="bid-meta-item">
                 <i class="fas fa-won-sign"></i>
-                <span><strong>Estimated Amount:</strong> <span class="bid-amount">${formattedAmount}</span></span>
+                <span><strong>추정금액:</strong> <span class="bid-amount">${formattedAmount}</span></span>
             </div>
         </div>
     `;
@@ -274,22 +277,22 @@ function showBidDetail(bid) {
     const modalBody = document.getElementById('modal-body');
     const modalTitle = document.getElementById('modal-title');
 
-    modalTitle.textContent = bid.bid_notice_name || 'Bid Details';
+    modalTitle.textContent = bid.bid_notice_name || '공고 상세';
 
     const formattedAmount = formatCurrency(bid.bid_amount);
     const formattedNoticeDate = formatDisplayDate(bid.notice_date);
     const formattedBidDate = formatDisplayDateTime(bid.bid_date);
 
     modalBody.innerHTML = `
-        <div class="detail-row"><div class="detail-label">Notice No</div><div class="detail-value">${escapeHtml(bid.bid_notice_no)}</div></div>
-        <div class="detail-row"><div class="detail-label">Notice Agency</div><div class="detail-value">${escapeHtml(bid.bid_notice_org || '-')}</div></div>
-        <div class="detail-row"><div class="detail-label">Demand Agency</div><div class="detail-value">${escapeHtml(bid.demand_org || '-')}</div></div>
-        <div class="detail-row"><div class="detail-label">Notice Date</div><div class="detail-value">${formattedNoticeDate}</div></div>
-        <div class="detail-row"><div class="detail-label">Bid Deadline</div><div class="detail-value">${formattedBidDate}</div></div>
-        <div class="detail-row"><div class="detail-label">Contract Type</div><div class="detail-value">${escapeHtml(bid.contract_type || '-')}</div></div>
-        <div class="detail-row"><div class="detail-label">Estimated Amount</div><div class="detail-value" style="color: var(--primary-color); font-weight: 600;">${formattedAmount}</div></div>
-        <div class="detail-row"><div class="detail-label">Status</div><div class="detail-value">${escapeHtml(bid.bid_status || '-')}</div></div>
-        ${bid.description ? `<div class="detail-row"><div class="detail-label">Description</div><div class="detail-value">${escapeHtml(bid.description)}</div></div>` : ''}
+        <div class="detail-row"><div class="detail-label">공고번호</div><div class="detail-value">${escapeHtml(bid.bid_notice_no)}</div></div>
+        <div class="detail-row"><div class="detail-label">공고기관</div><div class="detail-value">${escapeHtml(bid.bid_notice_org || '-')}</div></div>
+        <div class="detail-row"><div class="detail-label">수요기관</div><div class="detail-value">${escapeHtml(bid.demand_org || '-')}</div></div>
+        <div class="detail-row"><div class="detail-label">공고일</div><div class="detail-value">${formattedNoticeDate}</div></div>
+        <div class="detail-row"><div class="detail-label">입찰마감</div><div class="detail-value">${formattedBidDate}</div></div>
+        <div class="detail-row"><div class="detail-label">계약방식</div><div class="detail-value">${escapeHtml(bid.contract_type || '-')}</div></div>
+        <div class="detail-row"><div class="detail-label">추정금액</div><div class="detail-value" style="color: var(--primary-color); font-weight: 600;">${formattedAmount}</div></div>
+        <div class="detail-row"><div class="detail-label">상태</div><div class="detail-value">${escapeHtml(formatStatusLabel(bid.bid_status))}</div></div>
+        ${bid.description ? `<div class="detail-row"><div class="detail-label">설명</div><div class="detail-value">${escapeHtml(bid.description)}</div></div>` : ''}
     `;
 
     modal.classList.add('active');
@@ -304,7 +307,7 @@ function openBidDetail() {
     if (currentBidDetail && currentBidDetail.detail_url) {
         window.open(currentBidDetail.detail_url, '_blank');
     } else {
-        alert('Detail URL is not available.');
+        alert('상세 URL이 없습니다.');
     }
 }
 
@@ -356,18 +359,18 @@ async function updateStatistics() {
         document.getElementById('active-bids').textContent = formatNumber(activeBids || 0);
         document.getElementById('today-bids').textContent = formatNumber(todayBids || 0);
     } catch (error) {
-        console.error('Stats update failed:', error);
+        console.error('통계 업데이트 실패:', error);
     }
 }
 
 function updateResultsCount(count) {
-    document.getElementById('results-count').textContent = `Results: ${formatNumber(count)}`;
+    document.getElementById('results-count').textContent = `검색결과: ${formatNumber(count)}`;
 }
 
 function updateLastUpdateTime() {
     const now = new Date();
     const formatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    document.getElementById('last-update').innerHTML = `<i class="fas fa-sync-alt"></i> Last update: ${formatted}`;
+    document.getElementById('last-update').innerHTML = `<i class="fas fa-sync-alt"></i> 마지막 갱신: ${formatted}`;
 }
 
 function showLoading(show) {
@@ -386,6 +389,13 @@ function hideEmptyState() {
 
 function showError(message) {
     alert(message);
+}
+
+function formatStatusLabel(status) {
+    const normalized = String(status || '').toUpperCase();
+    if (normalized === 'OPEN') return '진행중';
+    if (normalized === 'CLOSED') return '마감';
+    return status || '-';
 }
 
 function formatCurrency(amount) {
