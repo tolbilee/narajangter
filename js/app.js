@@ -74,10 +74,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     setDefaultDates(7);
     syncDateFilterState();
     await refreshDashboard();
-    runRefresh(7, {
-        silent: true,
-        loadingMessage: '최초 접속 데이터를 불러오는 중입니다...',
-    });
+
+    // Hidden admin-only trigger (no UI entry point)
+    window.__manualSync = async (days = 7) => {
+        const n = Number(days) === 30 ? 30 : 7;
+        return runRefresh(n, {
+            silent: false,
+            loadingMessage: `관리자 수동 동기화(${n}일) 실행 중입니다...`,
+        });
+    };
 });
 
 function initEventListeners() {
@@ -136,10 +141,12 @@ function initEventListeners() {
     document.querySelectorAll('.quick-dates .btn').forEach((btn) => {
         btn.addEventListener('click', async (e) => {
             const days = Number(e.currentTarget.dataset.days || 7);
-            await runRefresh(days, {
-                silent: false,
-                loadingMessage: `최근 ${days}일 데이터를 다시 구성하고 있습니다...`,
-            });
+            currentDataWindowDays = days;
+            updateQuickDateButtons();
+            setDefaultDates(days);
+            syncDateFilterState();
+            currentPage = 1;
+            await refreshDashboard();
         });
     });
 
@@ -203,7 +210,7 @@ async function runRefresh(days, options = {}) {
 function setDefaultDates(days) {
     const end = new Date();
     const start = new Date();
-    start.setDate(start.getDate() - days);
+    start.setDate(start.getDate() - Math.max(0, days - 1));
     document.getElementById('start-date').value = formatDate(start);
     document.getElementById('end-date').value = formatDate(end);
 }

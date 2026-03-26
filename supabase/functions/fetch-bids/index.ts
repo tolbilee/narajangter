@@ -327,6 +327,7 @@ serve(async (req) => {
     let lastSuccessEndpoint = ''
     let lastSuccessEncoded = true
     let successfulDayFetches = 0
+    const successfulNoticeDates = new Set<string>()
     let quotaExceeded = false
 
     const dayOffsets = Array.from({ length: daysToFetch }, (_, i) => i)
@@ -348,12 +349,14 @@ serve(async (req) => {
       const offsetBatch = dayOffsets.slice(start, start + maxParallel)
       const batchResults = await Promise.all(offsetBatch.map(async (offset) => {
         const { dayBgn, dayEnd } = createDayWindow(today, offset)
+        const dayDate = formatDateOnly(new Date(today.getTime() - (offset * 24 * 60 * 60 * 1000)))
         try {
           const g2b = await fetchDailyItemsAllPages(G2B_API_KEY, dayBgn, dayEnd, numOfRows, maxPages, deadlineTs)
           const dayItems = g2b.dayItems
           return {
             ok: true as const,
             offset,
+            dayDate,
             dayItems,
             attempts: g2b.attempts.slice(-8),
             endpoint: g2b.endpoint,
@@ -366,6 +369,7 @@ serve(async (req) => {
           return {
             ok: false as const,
             offset,
+            dayDate,
             quotaExceeded: isQuota,
             attempts: [{
               endpoint: `daily-window-${offset}`,
@@ -382,6 +386,7 @@ serve(async (req) => {
         debugAttempts.push(...result.attempts)
         if (result.ok) {
           allItems.push(...result.dayItems)
+          successfulNoticeDates.add(result.dayDate)
           lastSuccessEndpoint = result.endpoint
           lastSuccessEncoded = result.encodedKey
           successfulDayFetches += 1
@@ -440,13 +445,23 @@ serve(async (req) => {
     }
 
     if (!resetAll) {
-      const { error: deleteRangeError } = await supabase
+      const { error: pruneError } = await supabase
         .from('bids')
         .delete()
-        .gte('notice_date', rangeStartDate)
-        .lte('notice_date', rangeEndDate)
-      if (deleteRangeError) {
-        throw new Error(`Failed to clear date window: ${deleteRangeError.message}`)
+        .lt('notice_date', rangeStartDate)
+      if (pruneError) {
+        throw new Error(`Failed to prune old rows: ${pruneError.message}`)
+      }
+
+      const daysToReplace = Array.from(successfulNoticeDates)
+      if (daysToReplace.length > 0) {
+        const { error: deleteRangeError } = await supabase
+          .from('bids')
+          .delete()
+          .in('notice_date', daysToReplace)
+        if (deleteRangeError) {
+          throw new Error(`Failed to clear successful day windows: ${deleteRangeError.message}`)
+        }
       }
     }
 
