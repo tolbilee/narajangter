@@ -28,7 +28,7 @@ type G2BSuccess = {
   attempts: G2BAttemptResult[]
 }
 
-const FOCUS_KEYWORDS = ['행사', '학교', '축제', '전시', '운영']
+const FOCUS_KEYWORDS = ['행사', '전시', '운영']
 
 function formatDateTimeCompact(date: Date, endOfDay = false): string {
   const year = date.getFullYear()
