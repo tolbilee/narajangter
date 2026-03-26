@@ -306,14 +306,23 @@ serve(async (req) => {
 
     let requestedDays = 7
     let resetAll = false
+    let syncMode: 'scheduled' | 'manual' = 'scheduled'
+    let requestedTimeBudgetMs: number | null = null
+    let requestedRotateBy: number | null = null
     if (req.method === 'POST') {
       try {
         const body = await req.json()
         if (body?.days === 30 || body?.days === '30') requestedDays = 30
         if (body?.resetAll === true) resetAll = true
+        if (body?.mode === 'manual') syncMode = 'manual'
+        if (Number.isFinite(Number(body?.timeBudgetMs))) requestedTimeBudgetMs = Number(body.timeBudgetMs)
+        if (Number.isFinite(Number(body?.rotateBy))) requestedRotateBy = Number(body.rotateBy)
       } catch {
         requestedDays = 7
         resetAll = false
+        syncMode = 'scheduled'
+        requestedTimeBudgetMs = null
+        requestedRotateBy = null
       }
     }
 
@@ -330,11 +339,24 @@ serve(async (req) => {
     const successfulNoticeDates = new Set<string>()
     let quotaExceeded = false
 
-    const dayOffsets = Array.from({ length: daysToFetch }, (_, i) => i)
-    const maxParallel = requestedDays === 30 ? 1 : 2
+    const baseOffsets = Array.from({ length: daysToFetch }, (_, i) => i)
+    const rotateByRaw = requestedRotateBy != null
+      ? requestedRotateBy
+      : Math.floor(Date.now() / (1000 * 60 * 60))
+    const rotateBy = ((rotateByRaw % daysToFetch) + daysToFetch) % daysToFetch
+    const dayOffsets = [...baseOffsets.slice(rotateBy), ...baseOffsets.slice(0, rotateBy)]
+    const maxParallel = requestedDays === 30
+      ? (syncMode === 'manual' ? 2 : 1)
+      : 2
     const numOfRows = 100
-    const maxPages = requestedDays === 30 ? 20 : 60
-    const deadlineTs = Date.now() + 60000
+    const maxPages = requestedDays === 30
+      ? (syncMode === 'manual' ? 60 : 20)
+      : 60
+    const defaultBudgetMs = syncMode === 'manual' ? 180000 : 60000
+    const timeBudgetMs = requestedTimeBudgetMs != null
+      ? Math.max(30000, Math.min(300000, requestedTimeBudgetMs))
+      : defaultBudgetMs
+    const deadlineTs = Date.now() + timeBudgetMs
     for (let start = 0; start < dayOffsets.length; start += maxParallel) {
       if (Date.now() > deadlineTs) {
         debugAttempts.push({
@@ -407,6 +429,12 @@ serve(async (req) => {
       }
     }
 
+    const requestedNoticeDates = baseOffsets.map((offset) =>
+      formatDateOnly(new Date(today.getTime() - (offset * 24 * 60 * 60 * 1000)))
+    )
+    const processedDays = requestedNoticeDates.filter((d) => successfulNoticeDates.has(d))
+    const missingDays = requestedNoticeDates.filter((d) => !successfulNoticeDates.has(d))
+
     const items = dedupeItemsByBidNotice(allItems)
     const filteredItems = items.filter(matchesFocusKeywords)
 
@@ -421,6 +449,11 @@ serve(async (req) => {
           totalItems: 0,
           sourceItems: items.length,
           keywords: FOCUS_KEYWORDS,
+          processedDays,
+          missingDays,
+          syncMode,
+          timeBudgetMs,
+          rotateBy,
           debug: {
             endpoint: lastSuccessEndpoint,
             encodedKey: lastSuccessEncoded,
@@ -477,6 +510,11 @@ serve(async (req) => {
             encodedKey: lastSuccessEncoded,
             attempts: debugAttempts.slice(-12),
           },
+          processedDays,
+          missingDays,
+          syncMode,
+          timeBudgetMs,
+          rotateBy,
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -574,6 +612,11 @@ serve(async (req) => {
         sourceItems: items.length,
         keywords: FOCUS_KEYWORDS,
         resetAll,
+        processedDays,
+        missingDays,
+        syncMode,
+        timeBudgetMs,
+        rotateBy,
         dateRange: {
           start: formatDateTimeCompact(startDate, false),
           end: formatDateTimeCompact(today, true),

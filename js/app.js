@@ -81,6 +81,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         return runRefresh(n, {
             silent: false,
             loadingMessage: `관리자 수동 동기화(${n}일) 실행 중입니다...`,
+            syncMode: 'manual',
+            timeBudgetMs: n === 30 ? 180000 : 120000,
         });
     };
 });
@@ -155,7 +157,12 @@ function initEventListeners() {
 }
 
 async function runRefresh(days, options = {}) {
-    const { silent = false, loadingMessage = '데이터를 동기화 중입니다...' } = options;
+    const {
+        silent = false,
+        loadingMessage = '데이터를 동기화 중입니다...',
+        syncMode = 'scheduled',
+        timeBudgetMs = undefined,
+    } = options;
     loadingStartAt = Date.now();
     loadingExpectedMs = getExpectedDurationMs(days);
     if (!silent) {
@@ -172,6 +179,8 @@ async function runRefresh(days, options = {}) {
             body: JSON.stringify({
                 days,
                 resetAll: false,
+                mode: syncMode,
+                ...(Number.isFinite(Number(timeBudgetMs)) ? { timeBudgetMs: Number(timeBudgetMs) } : {}),
             }),
         });
 
